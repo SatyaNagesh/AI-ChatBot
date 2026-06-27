@@ -245,8 +245,8 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
       .select('role, content')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (data) setMessages(data as Message[])
+      .then(({ data }: { data: Message[] | null }) => {
+        if (data) setMessages(data)
       })
   }, [sessionId])
 
@@ -447,7 +447,7 @@ export default function App() {
         .select('id, name, preview, unread')
         .eq('agent', a.name)
         .order('created_at', { ascending: false })
-        .then(({ data }) => {
+        .then(({ data }: { data: Session[] | null }) => {
           if (data) setSessionsByAgent(prev => ({ ...prev, [a.name]: data }))
         })
     })
