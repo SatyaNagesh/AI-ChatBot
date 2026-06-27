@@ -5,4 +5,4 @@ compatibility_date = "2025-04-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "ai-chatbot-db"
-database_id = ""
+database_id = "f945c4c0-d582-4cf8-90f1-00d72e17e0f9"
