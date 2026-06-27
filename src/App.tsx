@@ -25,8 +25,6 @@ const agents = [
 type Session = { id: string; name: string; preview: string; unread: number }
 type Message = { role: 'user' | 'assistant'; content: string }
 
-const API = `http://localhost:3456`
-
 function IconSidebar() {
   const topIcons = [
     { icon: Search, active: false }, { icon: Inbox, active: false },
@@ -270,10 +268,10 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
     supabase.from('messages').insert({ session_id: sessionId, role: 'user', content: text }).then()
 
     try {
-      const res = await fetch(`${API}/v1/chat/completions`, {
+      const res = await fetch(`/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session: sessionId, messages: [userMsg], model, stream: true }),
+        body: JSON.stringify({ messages: [userMsg], model }),
       })
       if (!res.ok) {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: request failed' }])
