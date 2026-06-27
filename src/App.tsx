@@ -6,7 +6,7 @@ import {
   Paperclip, Smile, ImageIcon, Type, Send, Pencil,
   ChevronDown, Pause, X, Circle, Loader2, Plus, Check
 } from 'lucide-react'
-const DB_API = import.meta.env.DEV ? 'http://localhost:3456' : 'https://ai-chatbot-db.YOUR-ACCOUNT.workers.dev'
+const DB_API = import.meta.env.DEV ? 'http://localhost:3456' : 'https://ai-chatbot-db.satyanagesh-r.workers.dev'
 const agents = [
   { name: 'Claude Opus 4.8', model: 'claude-opus-4-8', specialty: 'Architecture & Reasoning', online: true },
   { name: 'Claude Opus 4.7', model: 'claude-opus-4-7', specialty: 'Complex Debugging', online: true },
