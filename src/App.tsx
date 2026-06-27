@@ -226,14 +226,15 @@ function SessionList({ sessions, selectedSession, onSelectSession, onNewSession,
   )
 }
 
-function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
-  sessionId: string; model: string; sessionName: string; onFirstMessage: (id: string, text: string) => void
+function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }: {
+  sessionId: string; model: string; sessionName: string; onFirstMessage: (id: string, text: string) => void; onClose: () => void
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [hasNamed, setHasNamed] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!sessionId) return
@@ -268,14 +269,17 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
       body: JSON.stringify({ session_id: sessionId, role: 'user', content: text }),
     }).catch(() => {})
 
+    abortRef.current = new AbortController()
     try {
       const res = await fetch(`/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortRef.current.signal,
         body: JSON.stringify({ messages: [userMsg], model }),
       })
       if (!res.ok) {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: request failed' }])
+        abortRef.current = null
         setLoading(false)
         return
       }
@@ -307,9 +311,14 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
           body: JSON.stringify({ session_id: sessionId, role: 'assistant', content: reply }),
         }).catch(() => {})
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error: connection failed' }])
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setMessages(prev => prev.slice(0, -1))
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Error: connection failed' }])
+      }
     }
+    abortRef.current = null
     setLoading(false)
   }
 
@@ -326,8 +335,8 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB]"><Pause size={14} />Pause</button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><X size={14} />Close</button>
+          <button onClick={() => abortRef.current?.abort()} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
+          <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><X size={14} />Close</button>
           <ChevronDown size={16} className="text-[#6B7280]" />
         </div>
       </div>
@@ -507,7 +516,7 @@ export default function App() {
       <NavSidebar selectedAgent={selectedAgent} onSelectAgent={(name) => { setSelectedAgent(name); setSelectedSession('') }} />
       <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />
       {session ? (
-        <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} />
+        <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} />
       ) : (
         <div className="flex-1 flex items-center justify-center bg-white">
           <p className="text-sm text-[#9CA3AF]">Select a session or start a new one</p>
