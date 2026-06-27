@@ -432,10 +432,26 @@ export default function App() {
   const agent = agents.find(a => a.name === selectedAgent)
   const session = sessions.find(s => s.id === selectedSession)
 
+  useEffect(() => {
+    agents.forEach(a => {
+      fetch(`${API}/sessions?agent=${encodeURIComponent(a.name)}`)
+        .then(r => r.json())
+        .then(list => {
+          setSessionsByAgent(prev => ({ ...prev, [a.name]: list }))
+        })
+        .catch(() => {})
+    })
+  }, [])
+
   const handleNewSession = useCallback(() => {
     const slug = selectedAgent.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)
     const id = `${slug}-${Date.now()}`
     const newSession: Session = { id, name: 'New Session', preview: '', unread: 0 }
+    fetch(`${API}/session-create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name: 'New Session', agent: selectedAgent }),
+    }).catch(() => {})
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: [newSession, ...(prev[selectedAgent] || [])],
@@ -445,6 +461,11 @@ export default function App() {
 
   const handleFirstMessage = useCallback((sessionId: string, text: string) => {
     const name = text.length > 40 ? text.slice(0, 40) + '...' : text
+    fetch(`${API}/session-rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: sessionId, name, preview: text }),
+    }).catch(() => {})
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: (prev[selectedAgent] || []).map(s =>
@@ -454,6 +475,11 @@ export default function App() {
   }, [selectedAgent])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
+    fetch(`${API}/session-rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: sessionId, name }),
+    }).catch(() => {})
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: (prev[selectedAgent] || []).map(s =>
