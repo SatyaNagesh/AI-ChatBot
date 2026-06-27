@@ -388,7 +388,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
             </div>
             <div className="flex items-center gap-2">
               <button className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB]">Assign to Form</button>
-              <button onClick={handleSend} disabled={loading} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D97706] text-white rounded-lg text-xs font-medium hover:bg-[#B45309] disabled:opacity-50">
+              <button onClick={() => handleSend()} disabled={loading} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D97706] text-white rounded-lg text-xs font-medium hover:bg-[#B45309] disabled:opacity-50">
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {loading ? 'Sending...' : 'Send'}
               </button>
