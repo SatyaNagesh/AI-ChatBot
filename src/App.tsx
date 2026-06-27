@@ -6,6 +6,7 @@ import {
   Paperclip, Smile, ImageIcon, Type, Send, Pencil,
   ChevronDown, Pause, X, Circle, Loader2, Plus, Check
 } from 'lucide-react'
+import { supabase } from './lib/supabase'
 const agents = [
   { name: 'Claude Opus 4.8', model: 'claude-opus-4-8', specialty: 'Architecture & Reasoning', online: true },
   { name: 'Claude Opus 4.7', model: 'claude-opus-4-7', specialty: 'Complex Debugging', online: true },
@@ -238,12 +239,14 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
     if (!sessionId) return
     setMessages([])
     setHasNamed(false)
-    fetch(`/api/messages?session_id=${sessionId}`)
-      .then(r => r.json())
-      .then(data => {
+    supabase
+      .from('messages')
+      .select('role, content')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
         if (data) setMessages(data)
       })
-      .catch(() => {})
   }, [sessionId])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -261,11 +264,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
       onFirstMessage(sessionId, text)
     }
 
-    fetch(`/api/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, role: 'user', content: text }),
-    }).catch(() => {})
+    supabase.from('messages').insert({ session_id: sessionId, role: 'user', content: text }).then()
 
     try {
       const res = await fetch(`/api/chat`, {
@@ -300,11 +299,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage }: {
         }
       }
       if (reply) {
-        fetch(`/api/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, role: 'assistant', content: reply }),
-        }).catch(() => {})
+        supabase.from('messages').insert({ session_id: sessionId, role: 'assistant', content: reply }).then()
       }
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error: connection failed' }])
@@ -446,12 +441,14 @@ export default function App() {
 
   useEffect(() => {
     agents.forEach(a => {
-      fetch(`/api/sessions?agent=${encodeURIComponent(a.name)}`)
-        .then(r => r.json())
-        .then(data => {
+      supabase
+        .from('sessions')
+        .select('id, name, preview, unread')
+        .eq('agent', a.name)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => {
           if (data) setSessionsByAgent(prev => ({ ...prev, [a.name]: data }))
         })
-        .catch(() => {})
     })
   }, [])
 
@@ -459,11 +456,7 @@ export default function App() {
     const slug = selectedAgent.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)
     const id = `${slug}-${Date.now()}`
     const newSession: Session = { id, name: 'New Session', preview: '', unread: 0 }
-    fetch(`/api/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, name: 'New Session', agent: selectedAgent }),
-    }).catch(() => {})
+    supabase.from('sessions').insert({ id, name: 'New Session', agent: selectedAgent }).then()
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: [newSession, ...(prev[selectedAgent] || [])],
@@ -473,11 +466,7 @@ export default function App() {
 
   const handleFirstMessage = useCallback((sessionId: string, text: string) => {
     const name = text.length > 40 ? text.slice(0, 40) + '...' : text
-    fetch(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, preview: text }),
-    }).catch(() => {})
+    supabase.from('sessions').update({ name, preview: text }).eq('id', sessionId).then()
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: (prev[selectedAgent] || []).map(s =>
@@ -487,11 +476,7 @@ export default function App() {
   }, [selectedAgent])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
-    fetch(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    }).catch(() => {})
+    supabase.from('sessions').update({ name }).eq('id', sessionId).then()
     setSessionsByAgent(prev => ({
       ...prev,
       [selectedAgent]: (prev[selectedAgent] || []).map(s =>
