@@ -4,7 +4,7 @@ import {
   MessageCircle, BarChart3, Building2, Settings, CircleHelp,
   ChevronLeft, Filter, MoreHorizontal, Phone, MapPin,
   Paperclip, Smile, ImageIcon, Type, Send, Pencil,
-  ChevronDown, Pause, X, Circle, Loader2, Plus, Check
+  ChevronDown, Pause, Play, X, Circle, Loader2, Plus, Check
 } from 'lucide-react'
 const DB_API = import.meta.env.DEV ? 'http://localhost:3456' : 'https://ai-chatbot-api.satyanagesh-r.workers.dev'
 const agents = [
@@ -232,6 +232,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [paused, setPaused] = useState(false)
   const [hasNamed, setHasNamed] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -240,6 +241,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
     if (!sessionId) return
     setMessages([])
     setHasNamed(false)
+    setPaused(false)
     fetch(`${DB_API}/messages?session_id=${sessionId}`)
       .then(r => r.json())
       .then(data => {
@@ -250,24 +252,27 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  async function handleSend() {
-    const text = input.trim()
+  async function handleSend(forcedText?: string) {
+    const text = forcedText || input.trim()
     if (!text || loading) return
-    setInput('')
+    if (!forcedText) setInput('')
     const userMsg: Message = { role: 'user', content: text }
-    setMessages(prev => [...prev, userMsg])
+    if (!forcedText) setMessages(prev => [...prev, userMsg])
     setLoading(true)
+    setPaused(false)
 
-    if (!hasNamed && sessionName === 'New Session') {
+    if (!forcedText && !hasNamed && sessionName === 'New Session') {
       setHasNamed(true)
       onFirstMessage(sessionId, text)
     }
 
-    fetch(`${DB_API}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, role: 'user', content: text }),
-    }).catch(() => {})
+    if (!forcedText) {
+      fetch(`${DB_API}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, role: 'user', content: text }),
+      }).catch(() => {})
+    }
 
     abortRef.current = new AbortController()
     try {
@@ -275,7 +280,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abortRef.current.signal,
-        body: JSON.stringify({ messages: [userMsg], model }),
+        body: JSON.stringify({ messages: forcedText ? messages : [...messages, userMsg], model }),
       })
       if (!res.ok) {
         setMessages(prev => [...prev, { role: 'assistant', content: 'Error: request failed' }])
@@ -322,6 +327,12 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
     setLoading(false)
   }
 
+  async function handleResume() {
+    const lastMsg = messages[messages.length - 1]
+    if (!lastMsg || lastMsg.role !== 'user') return
+    await handleSend(lastMsg.content)
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-white min-w-0">
       <div className="flex items-center justify-between px-5 h-14 border-b border-[#E5E7EB]">
@@ -335,7 +346,11 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose }
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => abortRef.current?.abort()} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
+          {paused ? (
+            <button onClick={handleResume} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
+          ) : (
+            <button onClick={() => { abortRef.current?.abort(); setPaused(true) }} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
+          )}
           <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><X size={14} />Close</button>
           <ChevronDown size={16} className="text-[#6B7280]" />
         </div>
