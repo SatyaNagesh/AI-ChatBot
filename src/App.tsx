@@ -976,23 +976,10 @@ export default function App() {
   const [mcpServers, setMcpServers] = useState<Record<string, MCPServer[]>>({})
   const [agentNotes, setAgentNotes] = useState<Record<string, string>>({})
   const [activities, setActivities] = useState<Activity[]>([])
-  const [greatHalls, setGreatHalls] = useState<GreatHall[]>(() => {
-    try { const s = localStorage.getItem('greatHalls'); return s ? JSON.parse(s) : [] } catch { return [] }
-  })
-  const [activeHall, setActiveHall] = useState<GreatHall | null>(() => {
-    try { const s = localStorage.getItem('activeHall'); return s ? JSON.parse(s) : null } catch { return null }
-  })
-  const [hallNotes, setHallNotes] = useState<Record<string, string>>(() => {
-    try { const s = localStorage.getItem('hallNotes'); return s ? JSON.parse(s) : {} } catch { return {} }
-  })
+  const [greatHalls, setGreatHalls] = useState<GreatHall[]>([])
+  const [activeHall, setActiveHall] = useState<GreatHall | null>(null)
+  const [hallNotes, setHallNotes] = useState<Record<string, string>>({})
   const hallMcpServers: Record<string, Record<string, MCPServer[]>> = {}
-
-  useEffect(() => { localStorage.setItem('greatHalls', JSON.stringify(greatHalls)) }, [greatHalls])
-  useEffect(() => {
-    if (activeHall) localStorage.setItem('activeHall', JSON.stringify(activeHall))
-    else localStorage.removeItem('activeHall')
-  }, [activeHall])
-  useEffect(() => { localStorage.setItem('hallNotes', JSON.stringify(hallNotes)) }, [hallNotes])
 
   useEffect(() => {
     fetch(`${DB_API}/sessions?agent=__hall__`)
