@@ -4,7 +4,7 @@ import {
   MessageCircle, BarChart3, Building2, Settings, CircleHelp,
   ChevronLeft, Filter, MoreHorizontal,
   Paperclip, Smile, ImageIcon, Type, Send, Pencil,
-  ChevronDown, Pause, Play, X, Circle, Loader2, Plus, Check
+  ChevronDown, Pause, Play, X, Circle, Loader2, Plus, Check, Trash2
 } from 'lucide-react'
 const DB_API = import.meta.env.DEV ? 'http://localhost:3456' : 'https://ai-chatbot-api.satyanagesh-r.workers.dev'
 const AGENTS_DATA = [
@@ -22,13 +22,24 @@ const AGENTS_DATA = [
   { name: 'Gemini 3.1 Pro', model: 'gemini-3.1-pro-preview', specialty: 'Research & Analysis', online: true, description: 'Google Gemini 3.1 Pro excels at research, analysis, and understanding context across very long documents.', capabilities: ['Long-context reasoning', 'Research synthesis', 'Multimodal understanding'], bestAt: 'Analyzing long documents and synthesizing research insights', source: 'Bluesminds' },
   { name: 'Blackbox', model: 'blackbox', specialty: 'Untested', online: false, description: 'Blackbox is an experimental model available via Bluesminds. Capabilities are currently being evaluated.', capabilities: ['Currently testing'], bestAt: 'TBD — connection being evaluated', source: 'Bluesminds' },
 ]
+const AGENT_COLORS = ['#2563EB', '#D97706', '#059669', '#7C3AED', '#DC2626', '#0891B2', '#4F46E5', '#CA8A04', '#0D9488', '#9333EA', '#E11D48', '#0284C7', '#65A30D']
 
 type Agent = typeof AGENTS_DATA[0]
 type Session = { id: string; name: string; preview: string; unread: number }
 type Message = { role: 'user' | 'assistant'; content: string }
+type HallMessage = { role: 'user' | 'assistant'; content: string; agentName?: string }
 type MCPServer = { name: string; url: string }
 type Activity = { user: string; time: string; text: string; status: 'done' | 'doing' | 'pending' | 'waiting' }
 type GreatHall = { id: string; name: string; agents: string[] }
+
+function encodeAgentMsg(agent: string, text: string) { return JSON.stringify({ a: agent, t: text }) }
+function decodeAgentMsg(content: string): { agent?: string; text: string } {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed.a && parsed.t) return { agent: parsed.a, text: parsed.t }
+  } catch {}
+  return { text: content }
+}
 
 function IconSidebar() {
   const topIcons = [
@@ -58,12 +69,24 @@ function IconSidebar() {
   )
 }
 
-function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, onCreateGreatHall }: {
-  agents: typeof AGENTS_DATA; selectedAgent: string; onSelectAgent: (n: string) => void; greatHalls: GreatHall[]; onCreateGreatHall: (name: string, agentNames: string[]) => void
+function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall }: {
+  agents: typeof AGENTS_DATA; selectedAgent: string; onSelectAgent: (n: string) => void;
+  greatHalls: GreatHall[]; selectedHallId?: string; onSelectHall?: (h: GreatHall) => void;
+  onCreateGreatHall: (name: string, agentNames: string[]) => void; onDeleteHall?: (id: string) => void
 }) {
   const [showHallModal, setShowHallModal] = useState(false)
   const [hallName, setHallName] = useState('')
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
+  const [hallMenuOpen, setHallMenuOpen] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setHallMenuOpen(null)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   function openCreateHall() {
     setHallName('')
@@ -112,14 +135,22 @@ function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, onCreate
       <div>
         <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">A GREAT HALL</p>
         {greatHalls.map((hall) => (
-          <div key={hall.id} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[#6B7280] cursor-pointer hover:bg-[#F9FAFB] mb-1">
-            <div className="flex -space-x-1.5">
+          <div key={hall.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer mb-1 group ${selectedHallId === hall.id ? 'bg-[#F3F4F6]' : 'hover:bg-[#F9FAFB] text-[#6B7280]'}`} onClick={() => onSelectHall?.(hall)}>
+            <div className="flex -space-x-1.5 flex-shrink-0">
               {hall.agents.slice(0, 3).map((name, i) => (
-                <div key={i} className="w-5 h-5 rounded-full bg-[#E5E7EB] border border-white flex items-center justify-center text-[8px] font-medium text-[#6B7280]">{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+                <div key={i} className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-[8px] font-medium" style={{ backgroundColor: AGENT_COLORS[i % AGENT_COLORS.length] + '22', color: AGENT_COLORS[i % AGENT_COLORS.length] }}>{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
               ))}
               {hall.agents.length > 3 && <div className="w-5 h-5 rounded-full bg-[#E5E7EB] border border-white flex items-center justify-center text-[8px] font-medium text-[#9CA3AF]">+{hall.agents.length - 3}</div>}
             </div>
-            <span className="truncate">{hall.name}</span>
+            <span className="truncate flex-1">{hall.name}</span>
+            <MoreHorizontal size={13} className="text-[#9CA3AF] opacity-0 group-hover:opacity-100 flex-shrink-0" onClick={e => { e.stopPropagation(); setHallMenuOpen(hallMenuOpen === hall.id ? null : hall.id) }} />
+            {hallMenuOpen === hall.id && (
+              <div ref={menuRef} className="absolute right-4 mt-16 z-10 bg-white border border-[#E5E7EB] rounded-lg shadow-lg py-1 min-w-[130px]" onClick={e => e.stopPropagation()}>
+                <button onClick={() => { onDeleteHall?.(hall.id); setHallMenuOpen(null) }} className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#EF4444] hover:bg-[#F9FAFB]">
+                  <Trash2 size={13} /> Delete Hall
+                </button>
+              </div>
+            )}
           </div>
         ))}
         <button onClick={openCreateHall} className="flex items-center gap-1.5 w-full mt-1 px-3 py-2 rounded-lg text-sm font-medium text-[#2878D9] hover:bg-[#F3F4F6]"><Plus size={14} />New Great Hall</button>
@@ -187,9 +218,7 @@ function SessionList({ sessions, selectedSession, onSelectSession, onNewSession,
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(null)
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -209,9 +238,7 @@ function SessionList({ sessions, selectedSession, onSelectSession, onNewSession,
   }
 
   function confirmRename(id: string) {
-    if (renameValue.trim()) {
-      onRenameSession(id, renameValue.trim())
-    }
+    if (renameValue.trim()) onRenameSession(id, renameValue.trim())
     setRenaming(null)
     setRenameValue('')
   }
@@ -248,14 +275,7 @@ function SessionList({ sessions, selectedSession, onSelectSession, onNewSession,
               <div className="flex items-center justify-between">
                 {renaming === session.id ? (
                   <div className="flex items-center gap-1 flex-1 mr-1">
-                    <input
-                      ref={inputRef}
-                      className="flex-1 text-sm font-medium text-[#111827] border border-[#2878D9] rounded px-1.5 py-0.5 outline-none"
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') confirmRename(session.id); if (e.key === 'Escape') setRenaming(null) }}
-                      onClick={e => e.stopPropagation()}
-                    />
+                    <input ref={inputRef} className="flex-1 text-sm font-medium text-[#111827] border border-[#2878D9] rounded px-1.5 py-0.5 outline-none" value={renameValue} onChange={e => setRenameValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') confirmRename(session.id); if (e.key === 'Escape') setRenaming(null) }} onClick={e => e.stopPropagation()} />
                     <button onClick={e => { e.stopPropagation(); confirmRename(session.id) }}><Check size={14} className="text-[#22C55E]" /></button>
                     <button onClick={e => { e.stopPropagation(); setRenaming(null) }}><X size={14} className="text-[#EF4444]" /></button>
                   </div>
@@ -307,12 +327,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
     setMessages([])
     setHasNamed(false)
     setPaused(false)
-    fetch(`${DB_API}/messages?session_id=${sessionId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data) setMessages(data)
-      })
-      .catch(() => {})
+    fetch(`${DB_API}/messages?session_id=${sessionId}`).then(r => r.json()).then(data => { if (data) setMessages(data) }).catch(() => {})
   }, [sessionId])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -449,13 +464,7 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
       </div>
       <div className="border-t border-[#E5E7EB] px-5 py-4">
         <div className="bg-white border border-[#E5E7EB] rounded-xl">
-          <textarea
-            className="w-full resize-none outline-none text-sm text-[#111827] placeholder:text-[#9CA3AF] px-4 pt-3 h-20"
-            placeholder='Type "/" to use template message'
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-          />
+          <textarea className="w-full resize-none outline-none text-sm text-[#111827] placeholder:text-[#9CA3AF] px-4 pt-3 h-20" placeholder='Type "/" to use template message' value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }} />
           <div className="flex items-center justify-between px-3 pb-3">
             <div className="flex items-center gap-2">
               <Paperclip size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
@@ -468,6 +477,279 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
               <button onClick={() => handleSend()} disabled={loading} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D97706] text-white rounded-lg text-xs font-medium hover:bg-[#B45309] disabled:opacity-50">
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {loading ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HallConversation({ hall, onClose, onActivity }: {
+  hall: GreatHall; onClose: () => void; onActivity?: (a: Activity) => void
+}) {
+  const [messages, setMessages] = useState<HallMessage[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [currentAgentIdx, setCurrentAgentIdx] = useState(-1)
+  const [sessionName, setSessionName] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const sessionId = `hall-${hall.id}`
+
+  const hallName = sessionName || hall.name
+
+  useEffect(() => {
+    loadMessages()
+  }, [hall.id])
+
+  async function loadMessages() {
+    try {
+      const res = await fetch(`${DB_API}/messages?session_id=${sessionId}`)
+      const data = await res.json()
+      if (data && data.length > 0) {
+        const parsed: HallMessage[] = data.map((m: { role: string; content: string }) => {
+          if (m.role === 'assistant') {
+            const decoded = decodeAgentMsg(m.content)
+            return { ...m, content: decoded.text, agentName: decoded.agent }
+          }
+          return { ...m, content: m.content }
+        })
+        setMessages(parsed)
+        const firstUser = parsed.find(m => m.role === 'user')
+        if (firstUser) setSessionName(firstUser.content.length > 40 ? firstUser.content.slice(0, 40) + '...' : firstUser.content)
+      }
+    } catch {}
+  }
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, currentAgentIdx])
+
+  function reportActivity(agent: string, text: string, status: 'doing' | 'done' | 'waiting') {
+    onActivity?.({ user: agent, time: new Date().toLocaleString(), text, status })
+  }
+
+  async function sendToAgent(agentName: string, history: HallMessage[]): Promise<string> {
+    const agent = AGENTS_DATA.find(a => a.name === agentName)
+    if (!agent) return ''
+
+    const apiMessages = history.map(m => ({
+      role: m.role,
+      content: m.content,
+    }))
+
+    reportActivity(agentName, 'Agent is thinking...', 'doing')
+    setCurrentAgentIdx(hall.agents.indexOf(agentName))
+    setMessages(prev => [...prev, { role: 'assistant', content: '', agentName }])
+
+    abortRef.current = new AbortController()
+    try {
+      const res = await fetch(`/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: abortRef.current.signal,
+        body: JSON.stringify({ messages: apiMessages, model: agent.model }),
+      })
+      if (!res.ok) {
+        setMessages(prev => {
+          const copy = [...prev]
+          if (copy[copy.length - 1]?.role === 'assistant' && copy[copy.length - 1]?.agentName === agentName) {
+            copy[copy.length - 1] = { role: 'assistant', content: 'Error: request failed', agentName }
+          }
+          return copy
+        })
+        return ''
+      }
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let reply = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n').filter(l => l.startsWith('data: ') && l !== 'data: [DONE]')
+        for (const line of lines) {
+          try {
+            const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content || ''
+            reply += delta
+            setMessages(prev => {
+              const copy = [...prev]
+              if (copy[copy.length - 1]?.agentName === agentName) {
+                copy[copy.length - 1] = { role: 'assistant', content: reply, agentName }
+              }
+              return copy
+            })
+          } catch {}
+        }
+      }
+      if (reply) {
+        fetch(`${DB_API}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, role: 'assistant', content: encodeAgentMsg(agentName, reply) }),
+        }).catch(() => {})
+      }
+      reportActivity(agentName, reply.slice(0, 80) + (reply.length > 80 ? '...' : ''), 'done')
+      return reply
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setMessages(prev => prev.filter(m => m.content !== '' || m.agentName !== agentName))
+        return ''
+      }
+      setMessages(prev => {
+        const copy = [...prev]
+        const idx = copy.findIndex(m => m.role === 'assistant' && m.agentName === agentName && m.content === '')
+        if (idx >= 0) copy[idx] = { role: 'assistant', content: 'Error: connection failed', agentName }
+        return copy
+      })
+      return ''
+    }
+  }
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || loading) return
+    setInput('')
+    setLoading(true)
+    setCurrentAgentIdx(0)
+    setPaused(false)
+
+    if (!sessionName) {
+      const name = text.length > 40 ? text.slice(0, 40) + '...' : text
+      setSessionName(name)
+    }
+
+    const userMsg: HallMessage = { role: 'user', content: text }
+    setMessages(prev => [...prev, userMsg])
+
+    fetch(`${DB_API}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, role: 'user', content: text }),
+    }).catch(() => {})
+
+    let currentHistory = [...messages, userMsg]
+    for (const agentName of hall.agents) {
+      if (pausedRef.current) break
+      const reply = await sendToAgent(agentName, currentHistory)
+      if (reply) {
+        currentHistory = [...currentHistory, { role: 'assistant', content: reply, agentName }]
+      }
+    }
+
+    setCurrentAgentIdx(-1)
+    setLoading(false)
+  }
+
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
+
+  function handlePause() {
+    abortRef.current?.abort()
+    setPaused(true)
+    pausedRef.current = true
+    setCurrentAgentIdx(-1)
+    setLoading(false)
+  }
+
+  function handleResume() {
+    setPaused(false)
+    pausedRef.current = false
+  }
+
+  const agentColors = hall.agents.reduce((acc, name, i) => {
+    acc[name] = AGENT_COLORS[i % AGENT_COLORS.length]
+    return acc
+  }, {} as Record<string, string>)
+
+  return (
+    <div className="flex-1 flex flex-col bg-white min-w-0">
+      <div className="flex items-center justify-between px-5 h-14 border-b border-[#E5E7EB]">
+        <div className="flex items-center gap-3">
+          <div className="flex -space-x-2">
+            {hall.agents.slice(0, 4).map((name, i) => (
+              <div key={i} className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-medium" style={{ backgroundColor: agentColors[name] + '22', color: agentColors[name] }}>{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+            ))}
+            {hall.agents.length > 4 && <div className="w-7 h-7 rounded-full bg-[#E5E7EB] border-2 border-white flex items-center justify-center text-[9px] font-medium text-[#6B7280]">+{hall.agents.length - 4}</div>}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[#111827]">{hallName}</p>
+            <p className="text-xs text-[#6B7280]">{hall.agents.length} agents</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {loading && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#2878D9]">
+              <Loader2 size={14} className="animate-spin" />
+              {currentAgentIdx >= 0 ? `${hall.agents[currentAgentIdx]} (${currentAgentIdx + 1}/${hall.agents.length})` : 'Processing...'}
+            </div>
+          )}
+          {paused ? (
+            <button onClick={handleResume} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
+          ) : (
+            <button onClick={handlePause} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
+          )}
+          <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><X size={14} />Close</button>
+          <ChevronDown size={16} className="text-[#6B7280]" />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
+        {messages.length === 0 && !loading && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-[#9CA3AF] text-center max-w-md">
+              Send a message to all agents in <span className="font-semibold">{hall.name}</span>.<br />
+              They'll respond one after another, building on each other's answers.
+            </p>
+          </div>
+        )}
+        {messages.map((msg, i) => {
+          if (msg.role === 'user') {
+            return (
+              <div key={i} className="max-w-[500px] ml-auto">
+                <div className="rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap bg-[#2878D9] text-white">
+                  {msg.content}
+                </div>
+              </div>
+            )
+          }
+          const color = msg.agentName ? agentColors[msg.agentName] || '#6B7280' : '#6B7280'
+          return (
+            <div key={i} className="max-w-[500px] mr-auto">
+              {msg.agentName && (
+                <div className="flex items-center gap-2 mb-1 ml-1">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-medium" style={{ backgroundColor: color + '22', color }}>{msg.agentName.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+                  <span className="text-xs font-medium" style={{ color }}>{msg.agentName}</span>
+                </div>
+              )}
+              <div className="rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap" style={{ backgroundColor: color + '0D', color: '#111827' }}>
+                {msg.content || (loading && (
+                  <span className="inline-flex gap-1"><span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: color, animationDelay: '0ms' }} /><span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: color, animationDelay: '150ms' }} /><span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: color, animationDelay: '300ms' }} /></span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="border-t border-[#E5E7EB] px-5 py-4">
+        <div className="bg-white border border-[#E5E7EB] rounded-xl">
+          <textarea className="w-full resize-none outline-none text-sm text-[#111827] placeholder:text-[#9CA3AF] px-4 pt-3 h-20" placeholder={`Ask ${hall.agents.length} agents in ${hall.name}...`} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }} />
+          <div className="flex items-center justify-between px-3 pb-3">
+            <div className="flex items-center gap-2">
+              <Paperclip size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
+              <Smile size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
+              <ImageIcon size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
+              <Type size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
+              {hall.agents.map((name, i) => (
+                <div key={name} className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-medium border" style={{ borderColor: agentColors[name] + '44', backgroundColor: agentColors[name] + '11', color: agentColors[name] }} title={name}>{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleSend} disabled={loading} className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D97706] text-white rounded-lg text-xs font-medium hover:bg-[#B45309] disabled:opacity-50">
+                {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {loading ? 'Sending...' : 'Send to All'}
               </button>
             </div>
           </div>
@@ -593,6 +875,7 @@ export default function App() {
   const [agentNotes, setAgentNotes] = useState<Record<string, string>>({})
   const [activities, setActivities] = useState<Activity[]>([])
   const [greatHalls, setGreatHalls] = useState<GreatHall[]>([])
+  const [activeHall, setActiveHall] = useState<GreatHall | null>(null)
 
   const sessions = sessionsByAgent[selectedAgent] || []
   const agent = agents.find(a => a.name === selectedAgent)
@@ -658,6 +941,11 @@ export default function App() {
     setGreatHalls(prev => [...prev, { id, name, agents: agentNames }])
   }, [])
 
+  const handleDeleteHall = useCallback((id: string) => {
+    setGreatHalls(prev => prev.filter(h => h.id !== id))
+    if (activeHall?.id === id) setActiveHall(null)
+  }, [activeHall])
+
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
     fetch(`${DB_API}/sessions/${sessionId}`, {
       method: 'PATCH',
@@ -672,17 +960,47 @@ export default function App() {
     }))
   }, [selectedAgent])
 
+  function handleSelectAgent(name: string) {
+    setSelectedAgent(name)
+    setSelectedSession('')
+    setActiveHall(null)
+  }
+
+  function handleSelectHall(hall: GreatHall) {
+    setActiveHall(hall)
+    setSelectedSession('')
+  }
+
+  function handleCloseHall() {
+    setActiveHall(null)
+  }
+
   return (
     <div className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif]">
       <IconSidebar />
-      <NavSidebar agents={agents} selectedAgent={selectedAgent} onSelectAgent={(name) => { setSelectedAgent(name); setSelectedSession('') }} greatHalls={greatHalls} onCreateGreatHall={handleCreateGreatHall} />
-      <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />
-      {session ? (
-        <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
+      <NavSidebar
+        agents={agents}
+        selectedAgent={selectedAgent}
+        onSelectAgent={handleSelectAgent}
+        greatHalls={greatHalls}
+        selectedHallId={activeHall?.id}
+        onSelectHall={handleSelectHall}
+        onCreateGreatHall={handleCreateGreatHall}
+        onDeleteHall={handleDeleteHall}
+      />
+      {activeHall ? (
+        <HallConversation hall={activeHall} onClose={handleCloseHall} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-white">
-          <p className="text-sm text-[#9CA3AF]">Select a session or start a new one</p>
-        </div>
+        <>
+          <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />
+          {session ? (
+            <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-white">
+              <p className="text-sm text-[#9CA3AF]">Select a session or start a new one</p>
+            </div>
+          )}
+        </>
       )}
       <InfoPanel
         agent={agent}
