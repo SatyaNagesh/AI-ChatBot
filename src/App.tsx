@@ -375,7 +375,9 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
         body: JSON.stringify({ messages: forcedText ? messages : [...messages, userMsg], model }),
       })
       if (!res.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Error: request failed' }])
+        const errBody = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }))
+        const errMsg = errBody?.error?.message || errBody?.error || `Error: request failed`
+        setMessages(prev => [...prev, { role: 'assistant', content: errMsg }])
         abortRef.current = null
         setLoading(false)
         return
@@ -551,10 +553,12 @@ function HallConversation({ hall, onClose, onActivity }: {
         body: JSON.stringify({ messages: apiMessages, model: agent.model }),
       })
       if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }))
+        const errMsg = errBody?.error?.message || errBody?.error || 'Error: request failed'
         setMessages(prev => {
           const copy = [...prev]
           if (copy[copy.length - 1]?.role === 'assistant' && copy[copy.length - 1]?.agentName === agentName) {
-            copy[copy.length - 1] = { role: 'assistant', content: 'Error: request failed', agentName }
+            copy[copy.length - 1] = { role: 'assistant', content: errMsg, agentName }
           }
           return copy
         })
