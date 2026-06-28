@@ -58,3 +58,30 @@ create policy "anon all sessions" on openjarvis_sessions for all using (true) wi
 create policy "anon all messages" on openjarvis_messages for all using (true) with check (true);
 create policy "anon all memories" on openjarvis_memories for all using (true) with check (true);
 create policy "anon all traces" on openjarvis_traces for all using (true) with check (true);
+
+-- Global memories (shared across all sessions)
+create table if not exists openjarvis_global_memories (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now(),
+  key text not null,
+  value text not null,
+  category text default 'general'
+);
+
+-- Prompt templates
+create table if not exists openjarvis_templates (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now(),
+  name text not null,
+  prompt text not null,
+  variables text[] default '{}',
+  model text default ''
+);
+
+create index if not exists idx_global_memories_key on openjarvis_global_memories(key);
+
+alter table openjarvis_global_memories enable row level security;
+alter table openjarvis_templates enable row level security;
+
+create policy "anon all global memories" on openjarvis_global_memories for all using (true) with check (true);
+create policy "anon all templates" on openjarvis_templates for all using (true) with check (true);
