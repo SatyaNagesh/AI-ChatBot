@@ -46,7 +46,8 @@ function IconSidebar() {
     { icon: Search, active: false }, { icon: Inbox, active: false },
     { icon: House, active: false }, { icon: Ticket, active: false },
     { icon: AudioLines, active: false }, { icon: Calendar, active: false },
-    { icon: MessageCircle, active: false }, { icon: BarChart3, active: true },
+    { icon: MessageCircle, active: true },
+    { icon: BarChart3, active: false },
     { icon: Building2, active: false },
   ]
   const bottomIcons = [
@@ -56,14 +57,14 @@ function IconSidebar() {
     <div className="w-[52px] flex-shrink-0 bg-white border-r border-[#ECECEC] flex flex-col items-center py-3 justify-between">
       <div className="flex flex-col items-center gap-6">
         {topIcons.map(({ icon: Icon, active }, i) => (
-          <Icon key={i} size={20} className={active ? 'text-[#2563EB]' : 'text-[#9CA3AF]'} strokeWidth={1.8} />
+          <button key={i} className={`cursor-pointer ${active ? 'text-[#2563EB]' : 'text-[#9CA3AF] hover:text-[#6B7280]'}`}><Icon size={20} strokeWidth={1.8} /></button>
         ))}
       </div>
       <div className="flex flex-col items-center gap-6">
         {bottomIcons.map(({ icon: Icon, active }, i) => (
-          <Icon key={i} size={20} className={active ? 'text-[#2563EB]' : 'text-[#9CA3AF]'} strokeWidth={1.8} />
+          <button key={i} className={`cursor-pointer ${active ? 'text-[#2563EB]' : 'text-[#9CA3AF] hover:text-[#6B7280]'}`}><Icon size={20} strokeWidth={1.8} /></button>
         ))}
-        <div className="w-8 h-8 rounded-full bg-[#E5E7EB] flex items-center justify-center text-xs font-semibold text-[#111827]">U</div>
+        <div className="w-8 h-8 rounded-full bg-[#E5E7EB] flex items-center justify-center text-xs font-semibold text-[#111827] cursor-pointer">U</div>
       </div>
     </div>
   )
