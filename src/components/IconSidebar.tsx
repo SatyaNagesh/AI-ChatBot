@@ -9,7 +9,7 @@ const topIcons: IconItem[] = [
   { icon: Calendar, page: 'calendar', label: 'Calendar' },
   { icon: Inbox, page: 'inbox', label: 'Inbox' },
   { icon: Ticket, page: 'tasks', label: 'Tasks' },
-  { icon: AudioLines, page: 'voice', label: 'Voice' },
+  { icon: AudioLines, page: 'voice', label: 'OpenJarvis' },
   { icon: Search, page: 'search', label: 'Search' },
   { icon: BarChart3, page: 'analytics', label: 'Analytics' },
   { icon: Building2, page: 'projects', label: 'Projects' },

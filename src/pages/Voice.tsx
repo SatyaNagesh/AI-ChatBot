@@ -1,211 +1,271 @@
-import { useState, useEffect } from 'react'
-import { ExternalLink, GitFork, BookOpen, Terminal, Cpu, Zap, Globe, Download, Sparkles, Check, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Send, Trash2, Plus, MessageSquare, Brain, Activity, Clock, Cpu, Loader2, ExternalLink } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { AGENTS_DATA } from '../data/agents'
 
-const FEATURES = [
-  { icon: Cpu, title: 'Local-First', desc: '100% on-device inference via Ollama, vLLM, SGLang, or llama.cpp. No cloud dependency.' },
-  { icon: Zap, title: 'Hardware-Aware', desc: 'Auto-detects your GPU/CPU and tunes the engine for optimal efficiency.' },
-  { icon: Globe, title: 'Cloud Optional', desc: 'Add cloud APIs (OpenRouter, Anthropic, OpenAI, Google) only when local isn\'t enough.' },
-  { icon: Sparkles, title: 'Learning Loop', desc: 'Traces stored in local DB improve models over time using your own interaction data.' },
-]
-
-const QUICK_CMDS = [
-  { cmd: 'curl -fsSL https://open-jarvis.github.io/OpenJarvis/install.sh | bash', label: 'macOS / Linux / WSL2' },
-  { cmd: 'irm https://open-jarvis.github.io/OpenJarvis/install.ps1 | iex', label: 'Native Windows' },
-  { cmd: 'jarvis', label: 'Start chatting' },
-  { cmd: 'jarvis init --preset morning-digest-mac', label: 'Quick preset' },
-]
+type OjSession = { id: string; created_at: string; title: string; model: string; messages: OjMessage[] }
+type OjMessage = { id: string; role: 'user' | 'assistant'; content: string }
+type OjTrace = { id: string; latency_ms: number; tokens_in: number; tokens_out: number; model: string }
+type OjMemory = { id: string; key: string; value: string; context: string }
 
 export default function VoicePage() {
-  const [jarvisRunning, setJarvisRunning] = useState<boolean | null>(null)
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
-  const [faqOpen, setFaqOpen] = useState<number | null>(null)
+  const [sessions, setSessions] = useState<OjSession[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [input, setInput] = useState('')
+  const [streaming, setStreaming] = useState(false)
+  const [model, setModel] = useState(AGENTS_DATA[0].model)
+  const [traces, setTraces] = useState<OjTrace[]>([])
+  const [memories, setMemories] = useState<OjMemory[]>([])
+  const [memKey, setMemKey] = useState('')
+  const [memVal, setMemVal] = useState('')
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    fetch('http://localhost:5173/api/health', { signal: AbortSignal.timeout(2000) })
-      .then(r => setJarvisRunning(r.ok))
-      .catch(() => setJarvisRunning(false))
+  const activeSession = sessions.find(s => s.id === activeId) || null
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [activeSession?.messages])
+
+  const loadSessions = useCallback(async () => {
+    const { data } = await supabase.from('openjarvis_sessions').select('*').order('created_at', { ascending: false })
+    if (data) {
+      const withMessages = await Promise.all(data.map(async (s) => {
+        const { data: msgs } = await supabase.from('openjarvis_messages').select('*').eq('session_id', s.id).order('created_at', { ascending: true })
+        return { ...s, messages: msgs || [] }
+      }))
+      setSessions(withMessages)
+    }
   }, [])
 
-  function copyCmd(idx: number, text: string) {
-    navigator.clipboard.writeText(text)
-    setCopiedIdx(idx)
-    setTimeout(() => setCopiedIdx(null), 2000)
+  const loadTraces = useCallback(async (sessionId: string) => {
+    const { data } = await supabase.from('openjarvis_traces').select('*').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(10)
+    if (data) setTraces(data)
+  }, [])
+
+  const loadMemories = useCallback(async (sessionId: string) => {
+    const { data } = await supabase.from('openjarvis_memories').select('*').eq('session_id', sessionId).order('created_at', { ascending: false })
+    if (data) setMemories(data)
+  }, [])
+
+  useEffect(() => { loadSessions() }, [loadSessions])
+  useEffect(() => {
+    if (activeId) { loadTraces(activeId); loadMemories(activeId) }
+  }, [activeId, loadTraces, loadMemories])
+
+  async function createSession() {
+    const { data } = await supabase.from('openjarvis_sessions').insert({ title: 'New conversation', model }).select().single()
+    if (data) { setSessions(prev => [{ ...data, messages: [] }, ...prev]); setActiveId(data.id) }
+  }
+
+  async function deleteSession(id: string) {
+    await supabase.from('openjarvis_messages').delete().eq('session_id', id)
+    await supabase.from('openjarvis_traces').delete().eq('session_id', id)
+    await supabase.from('openjarvis_memories').delete().eq('session_id', id)
+    await supabase.from('openjarvis_sessions').delete().eq('id', id)
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (activeId === id) setActiveId(null)
+  }
+
+  async function renameSession(id: string, title: string) {
+    await supabase.from('openjarvis_sessions').update({ title }).eq('id', id)
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))
+  }
+
+  async function sendMessage() {
+    if (!input.trim() || !activeId || streaming) return
+    const startTime = performance.now()
+    setStreaming(true)
+
+    const userMsg: OjMessage = { id: crypto.randomUUID(), role: 'user', content: input.trim() }
+    const userText = input.trim()
+    setInput('')
+
+    await supabase.from('openjarvis_messages').insert({ id: userMsg.id, session_id: activeId, role: 'user', content: userText, model })
+    setSessions(prev => prev.map(s => s.id === activeId ? { ...s, messages: [...s.messages, userMsg] } : s))
+
+    if (sessions.find(s => s.id === activeId)?.messages.length === 1) {
+      const title = userText.slice(0, 60) + (userText.length > 60 ? '...' : '')
+      renameSession(activeId, title)
+    }
+
+    const assistantId = crypto.randomUUID()
+    const assistantMsg: OjMessage = { id: assistantId, role: 'assistant', content: '' }
+    setSessions(prev => prev.map(s => s.id === activeId ? { ...s, messages: [...s.messages, assistantMsg] } : s))
+
+    abortRef.current = new AbortController()
+    try {
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: userText }] }),
+        signal: abortRef.current.signal,
+      })
+      const text = await resp.text()
+      const latencyMs = Math.round(performance.now() - startTime)
+
+      setSessions(prev => prev.map(s => s.id === activeId ? { ...s, messages: s.messages.map(m => m.id === assistantId ? { ...m, content: text } : m) } : s))
+      await supabase.from('openjarvis_messages').insert({ id: assistantId, session_id: activeId, role: 'assistant', content: text, model })
+      await supabase.from('openjarvis_traces').insert({ session_id: activeId, message_id: assistantId, model, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(text.length / 4), latency_ms: latencyMs, success: true })
+      setTraces(prev => [{ id: crypto.randomUUID(), latency_ms: latencyMs, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(text.length / 4), model }, ...prev.slice(0, 9)])
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return
+      const errMsg = { id: crypto.randomUUID(), role: 'assistant' as const, content: 'Request failed. Check your API endpoint.' }
+      setSessions(prev => prev.map(s => s.id === activeId ? { ...s, messages: [...s.messages, errMsg] } : s))
+    } finally { setStreaming(false); abortRef.current = null }
+  }
+
+  async function storeMemory() {
+    if (!memKey.trim() || !memVal.trim() || !activeId) return
+    const { data } = await supabase.from('openjarvis_memories').insert({ session_id: activeId, key: memKey.trim(), value: memVal.trim(), context: `from model ${model}` }).select().single()
+    if (data) { setMemories(prev => [data, ...prev]); setMemKey(''); setMemVal('') }
+  }
+
+  async function deleteMemory(id: string) {
+    await supabase.from('openjarvis_memories').delete().eq('id', id)
+    setMemories(prev => prev.filter(m => m.id !== id))
   }
 
   return (
     <div className="flex-1 flex bg-[#FAFAFA] overflow-y-auto">
-      <div className="flex-1 max-w-4xl mx-auto px-8 py-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-xl font-semibold text-[#111827] tracking-tight">OpenJarvis</h1>
-            <p className="text-sm text-[#6B7280] mt-0.5">Personal AI, On Personal Devices</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {jarvisRunning === true && (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Running on localhost:5173
-              </span>
-            )}
-            {jarvisRunning === false && (
-              <span className="flex items-center gap-1.5 text-xs text-[#9CA3AF] bg-[#F3F4F6] px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF]" />
-                Not detected
-              </span>
-            )}
-            {jarvisRunning === null && (
-              <span className="text-xs text-[#9CA3AF]">Checking...</span>
-            )}
-          </div>
+      {/* Sessions sidebar */}
+      <div className="w-56 flex-shrink-0 bg-white border-r border-[#E5E7EB] flex flex-col">
+        <div className="p-3 border-b border-[#E5E7EB]">
+          <button onClick={createSession} className="w-full flex items-center justify-center gap-1.5 text-sm bg-[#2878D9] text-white rounded-lg py-2 hover:bg-[#1D5FA8] cursor-pointer">
+            <Plus size={14} /> New Session
+          </button>
         </div>
-
-        {/* Hero */}
-        <div className="bg-gradient-to-br from-[#0A0F1E] to-[#1A1F2E] rounded-2xl p-8 mb-8 text-white">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl font-bold text-white">J</span>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold mb-2">A research framework for composable, on-device AI</h2>
-              <p className="text-sm text-gray-400 leading-relaxed max-w-2xl">
-                OpenJarvis is a Stanford research framework for building personal AI agents that run locally by default,
-                calling cloud APIs only when necessary. It provides shared primitives for on-device agents, evaluations
-                that treat energy, FLOPs, latency, and cost as first-class constraints, and a learning loop that improves
-                models using local trace data.
-              </p>
-              <div className="flex items-center gap-3 mt-4">
-                <span className="text-xs text-gray-500">Stanford Scaling Intelligence Lab · Hazy Research</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Status + Quick Launch */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
-            <h3 className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3">STATUS</h3>
-            {jarvisRunning === true ? (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-sm font-medium text-[#111827]">OpenJarvis is running</span>
-                </div>
-                <a
-                  href="http://localhost:5173"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-[#2878D9] hover:underline"
-                >
-                  <ExternalLink size={14} /> Open Web UI
-                </a>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-2 h-2 rounded-full bg-[#9CA3AF]" />
-                  <span className="text-sm font-medium text-[#111827]">Not running</span>
-                </div>
-                <p className="text-xs text-[#9CA3AF]">Install OpenJarvis to get started</p>
-              </div>
-            )}
-          </div>
-          <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
-            <h3 className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3">QUICK LAUNCH</h3>
-            <div className="flex flex-wrap gap-2">
-              <a href="https://open-jarvis.github.io/OpenJarvis/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs bg-[#F3F4F6] text-[#374151] px-3 py-1.5 rounded-lg hover:bg-[#E5E7EB]">
-                <BookOpen size={12} /> Docs
-              </a>
-              <a href="https://github.com/open-jarvis/OpenJarvis" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs bg-[#F3F4F6] text-[#374151] px-3 py-1.5 rounded-lg hover:bg-[#E5E7EB]">
-                <GitFork size={12} /> GitHub
-              </a>
-              <a href="https://discord.gg/YZZRxCAhmm" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs bg-[#F3F4F6] text-[#374151] px-3 py-1.5 rounded-lg hover:bg-[#E5E7EB]">
-                <ExternalLink size={12} /> Discord
-              </a>
-              <button onClick={() => window.location.href = 'https://open-jarvis.github.io/OpenJarvis/getting-started/install/'} className="inline-flex items-center gap-1.5 text-xs bg-[#2878D9] text-white px-3 py-1.5 rounded-lg hover:bg-[#1D5FA8]">
-                <Download size={12} /> Install
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Features */}
-        <h3 className="text-sm font-semibold text-[#111827] mb-3">Core Features</h3>
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          {FEATURES.map((f, i) => (
-            <div key={i} className="bg-white rounded-xl border border-[#E5E7EB] p-4 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
-                <f.icon size={16} className="text-[#2878D9]" />
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-[#111827]">{f.title}</h4>
-                <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">{f.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Installation */}
-        <h3 className="text-sm font-semibold text-[#111827] mb-3">Installation</h3>
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 mb-8">
-          <div className="space-y-2">
-            {QUICK_CMDS.map((q, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="text-xs text-[#6B7280] w-32 flex-shrink-0">{q.label}</span>
-                <code className="flex-1 text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] font-mono truncate">{q.cmd}</code>
-                <button
-                  onClick={() => copyCmd(i, q.cmd)}
-                  className="flex-shrink-0 w-7 h-7 rounded-md bg-[#F3F4F6] hover:bg-[#E5E7EB] flex items-center justify-center"
-                >
-                  {copiedIdx === i ? <Check size={12} className="text-emerald-600" /> : <Terminal size={12} className="text-[#6B7280]" />}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 5 Pillars */}
-        <h3 className="text-sm font-semibold text-[#111827] mb-3">Architecture</h3>
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 mb-8">
-          <div className="grid grid-cols-5 gap-4">
-            {['Intelligence', 'Agent', 'Tools', 'Engine', 'Learning'].map((p, i) => (
-              <div key={i} className="text-center">
-                <div className="w-10 h-10 rounded-full bg-[#F3F4F6] flex items-center justify-center mx-auto mb-2">
-                  <span className="text-sm font-bold text-[#2878D9]">{i + 1}</span>
-                </div>
-                <p className="text-xs font-medium text-[#111827]">{p}</p>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-[#9CA3AF] text-center mt-4">Five interconnected pillars powering local-first personal AI</p>
-        </div>
-
-        {/* FAQ */}
-        <h3 className="text-sm font-semibold text-[#111827] mb-3">FAQ</h3>
-        <div className="bg-white rounded-xl border border-[#E5E7EB] divide-y divide-[#E5E7EB] mb-8">
-          {[
-            { q: 'What hardware do I need?', a: 'Any modern x86_64 or ARM64 CPU with 4GB RAM minimum. 8GB+ recommended for local inference. GPU acceleration auto-detected.' },
-            { q: 'How is this different from Ollama?', a: 'Ollama is an inference engine. OpenJarvis is a full framework on top — adding agents, tools, evaluation, and a learning loop that treats energy and cost as first-class metrics.' },
-            { q: 'Can I use cloud models too?', a: 'Yes. Local-first is the default, but you can add cloud providers (OpenRouter, Anthropic, OpenAI, Google) as a fallback for tasks local models can\'t handle.' },
-            { q: 'Is my data private?', a: 'Yes. Everything runs locally by default. No data leaves your machine unless you explicitly configure a cloud API key.' },
-          ].map((item, i) => (
-            <button key={i} onClick={() => setFaqOpen(faqOpen === i ? null : i)} className="w-full text-left p-4 flex items-center justify-between cursor-pointer hover:bg-[#FAFAFA]">
-              <span className="text-sm text-[#111827]">{item.q}</span>
-              <ChevronDown size={14} className={`text-[#9CA3AF] transition-transform ${faqOpen === i ? 'rotate-180' : ''}`} />
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {sessions.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setActiveId(s.id)}
+              className={`w-full text-left p-2 rounded-lg text-sm flex items-center gap-2 cursor-pointer ${activeId === s.id ? 'bg-[#EFF6FF] text-[#2878D9]' : 'text-[#374151] hover:bg-[#F3F4F6]'}`}
+            >
+              <MessageSquare size={14} className="flex-shrink-0" />
+              <span className="truncate flex-1">{s.title}</span>
+              <button onClick={e => { e.stopPropagation(); deleteSession(s.id) }} className="opacity-0 hover:opacity-100 text-[#9CA3AF] hover:text-red-500 flex-shrink-0 cursor-pointer"><Trash2 size={12} /></button>
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="text-center py-4">
-          <p className="text-xs text-[#9CA3AF]">
-            OpenJarvis is a research project from{' '}
-            <a href="https://scalingintelligence.stanford.edu/" target="_blank" rel="noopener noreferrer" className="text-[#2878D9] hover:underline">Stanford Scaling Intelligence Lab</a>
-            {' '}·{' '}
-            <a href="https://github.com/open-jarvis/OpenJarvis" target="_blank" rel="noopener noreferrer" className="text-[#2878D9] hover:underline">GitHub</a>
-            {' '}·{' '}
-            <a href="https://open-jarvis.github.io/OpenJarvis/" target="_blank" rel="noopener noreferrer" className="text-[#2878D9] hover:underline">Documentation</a>
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-[#E5E7EB] bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#0A0F1E] flex items-center justify-center">
+              <span className="text-sm font-bold text-white">J</span>
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[#111827]">OpenJarvis</h2>
+              <p className="text-[10px] text-[#9CA3AF]">Stanford Scaling Intelligence Lab</p>
+            </div>
+          </div>
+          <select
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-1.5 bg-white text-[#374151] focus:outline-none focus:border-[#2878D9]"
+          >
+            {AGENTS_DATA.map(a => <option key={a.model} value={a.model}>{a.name}</option>)}
+          </select>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {!activeSession && (
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-[#0A0F1E] flex items-center justify-center mb-4">
+                <Cpu size={28} className="text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#111827] mb-1">Personal AI, On Your Cloud</h3>
+              <p className="text-sm text-[#6B7280] max-w-md">
+                Start a new session to chat with any AI model. Conversations, memories, and traces are persisted in Supabase.
+              </p>
+            </div>
+          )}
+          {activeSession?.messages.map(m => (
+            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${m.role === 'user' ? 'bg-[#2878D9] text-white' : 'bg-white border border-[#E5E7EB] text-[#111827]'}`}>
+                {m.content || <span className="text-[#9CA3AF] italic">streaming...</span>}
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="px-6 py-3 border-t border-[#E5E7EB] bg-white">
+          <div className="flex items-center gap-2">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              placeholder={activeId ? 'Message OpenJarvis...' : 'Create a session first'}
+              disabled={!activeId || streaming}
+              className="flex-1 text-sm border border-[#E5E7EB] rounded-lg px-4 py-2 bg-[#FAFAFA] focus:outline-none focus:border-[#2878D9] disabled:opacity-50"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!activeId || streaming || !input.trim()}
+              className="w-9 h-9 rounded-lg bg-[#2878D9] text-white flex items-center justify-center hover:bg-[#1D5FA8] disabled:opacity-50 cursor-pointer"
+            >
+              {streaming ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel - Traces + Memories */}
+      <div className="w-64 flex-shrink-0 bg-white border-l border-[#E5E7EB] flex flex-col overflow-y-auto">
+        {/* Traces */}
+        <div className="p-4 border-b border-[#E5E7EB]">
+          <h3 className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3 flex items-center gap-1.5"><Activity size={12} /> TRACES</h3>
+          {!activeId ? <p className="text-xs text-[#9CA3AF]">Select a session</p> : traces.length === 0 ? <p className="text-xs text-[#9CA3AF]">No traces yet</p> : (
+            <div className="space-y-2">
+              {traces.map(t => (
+                <div key={t.id} className="bg-[#F9FAFB] rounded-lg p-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-[#6B7280] mb-1">
+                    <Clock size={10} /> {t.latency_ms}ms · {t.tokens_in}→{t.tokens_out} tok
+                  </div>
+                  <div className="text-[#9CA3AF] truncate">{t.model}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Memories */}
+        <div className="p-4 border-b border-[#E5E7EB]">
+          <h3 className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3 flex items-center gap-1.5"><Brain size={12} /> MEMORIES</h3>
+          {!activeId ? <p className="text-xs text-[#9CA3AF]">Select a session</p> : (
+            <div>
+              <div className="flex gap-1 mb-2">
+                <input value={memKey} onChange={e => setMemKey(e.target.value)} placeholder="key" className="flex-1 text-xs border border-[#E5E7EB] rounded px-2 py-1 focus:outline-none focus:border-[#2878D9]" />
+                <input value={memVal} onChange={e => setMemVal(e.target.value)} placeholder="value" className="flex-1 text-xs border border-[#E5E7EB] rounded px-2 py-1 focus:outline-none focus:border-[#2878D9]" />
+                <button onClick={storeMemory} className="w-6 h-6 rounded bg-[#2878D9] text-white flex items-center justify-center hover:bg-[#1D5FA8] cursor-pointer"><Plus size={11} /></button>
+              </div>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {memories.map(m => (
+                  <div key={m.id} className="flex items-center gap-1 text-xs bg-[#F9FAFB] rounded px-2 py-1.5">
+                    <span className="font-medium text-[#374151]">{m.key}:</span>
+                    <span className="text-[#6B7280] truncate flex-1">{m.value}</span>
+                    <button onClick={() => deleteMemory(m.id)} className="text-[#9CA3AF] hover:text-red-500 cursor-pointer"><Trash2 size={10} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="p-4">
+          <h3 className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3 flex items-center gap-1.5"><Cpu size={12} /> ABOUT</h3>
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            OpenJarvis Cloud runs on your existing infra — AI via Vercel proxy, persistence in Supabase. No local install needed.
           </p>
+          <a href="https://open-jarvis.github.io/OpenJarvis/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#2878D9] hover:underline mt-2">
+            OpenJarvis docs <ExternalLink size={10} />
+          </a>
         </div>
       </div>
     </div>
