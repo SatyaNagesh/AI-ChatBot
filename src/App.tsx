@@ -19,7 +19,7 @@ const AGENTS_DATA = [
   { name: 'GPT-5.5', model: 'gpt-5.5', specialty: 'Code Generation', online: true, description: 'GPT-5.5 is OpenAI\'s latest model with state-of-the-art code generation and problem-solving abilities.', capabilities: ['Code generation & translation', 'Algorithm design', 'Technical documentation'], bestAt: 'Generating production-quality code across multiple languages', source: 'tokenlb.net' },
   { name: 'GPT-5.4', model: 'gpt-5.4', specialty: 'General Purpose', online: true, description: 'GPT-5.4 is a reliable, general-purpose model from OpenAI suitable for a wide variety of tasks.', capabilities: ['General problem solving', 'Content creation', 'Data analysis'], bestAt: 'Reliable general-purpose assistance for everyday tasks', source: 'tokenlb.net' },
   { name: 'GPT-5.4 Mini', model: 'gpt-5.4-mini', specialty: 'Lightweight Tasks', online: true, description: 'GPT-5.4 Mini is a lightweight, cost-effective model for simple, routine tasks that don\'t require full-scale reasoning.', capabilities: ['Simple Q&A', 'Text summarization', 'Quick formatting'], bestAt: 'Cost-effective handling of simple, repetitive tasks', source: 'tokenlb.net' },
-  { name: 'Gemini 3.1 Pro', model: 'gemini-3.1-pro-preview', specialty: 'Research & Analysis', online: true, description: 'Google Gemini 3.1 Pro excels at research, analysis, and understanding context across very long documents.', capabilities: ['Long-context reasoning', 'Research synthesis', 'Multimodal understanding'], bestAt: 'Analyzing long documents and synthesizing research insights', source: 'Bluesminds' },
+  { name: 'Gemini 3.1 Pro', model: 'gemini-3.1-pro-preview', specialty: 'Research & Analysis', online: false, description: 'Google Gemini 3.1 Pro excels at research, analysis, and understanding context across very long documents.', capabilities: ['Long-context reasoning', 'Research synthesis', 'Multimodal understanding'], bestAt: 'Analyzing long documents and synthesizing research insights', source: 'Bluesminds' },
   { name: 'Blackbox', model: 'blackbox', specialty: 'Untested', online: false, description: 'Blackbox is an experimental model available via Bluesminds. Capabilities are currently being evaluated.', capabilities: ['Currently testing'], bestAt: 'TBD — connection being evaluated', source: 'Bluesminds' },
 ]
 const AGENT_COLORS = ['#2563EB', '#D97706', '#059669', '#7C3AED', '#DC2626', '#0891B2', '#4F46E5', '#CA8A04', '#0D9488', '#9333EA', '#E11D48', '#0284C7', '#65A30D']
@@ -69,10 +69,11 @@ function IconSidebar() {
   )
 }
 
-function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall }: {
+function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall, totalSessions, totalAgents, awaitingCount, pausedCount }: {
   agents: typeof AGENTS_DATA; selectedAgent: string; onSelectAgent: (n: string) => void;
   greatHalls: GreatHall[]; selectedHallId?: string; onSelectHall?: (h: GreatHall) => void;
   onCreateGreatHall: (name: string, agentNames: string[]) => void; onDeleteHall?: (id: string) => void
+  totalSessions: number; totalAgents: number; awaitingCount: number; pausedCount: number
 }) {
   const [showHallModal, setShowHallModal] = useState(false)
   const [hallName, setHallName] = useState('')
@@ -123,8 +124,8 @@ function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selected
       <div>
         <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">STATUS</p>
         {[
-          { label: 'All', count: 56, color: '#9CA3AF' }, { label: 'Agent', count: 123, color: '#2563EB' },
-          { label: 'Awaiting agent', count: 34, color: '#D97706' }, { label: 'Paused', count: 89, color: '#EAB308' },
+          { label: 'All', count: totalSessions, color: '#9CA3AF' }, { label: 'Agent', count: totalAgents, color: '#2563EB' },
+          { label: 'Awaiting agent', count: awaitingCount, color: '#D97706' }, { label: 'Paused', count: pausedCount, color: '#EAB308' },
         ].map((item, i) => (
           <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-[#6B7280] cursor-pointer hover:bg-[#F9FAFB]">
             <div className="flex items-center gap-2"><Circle size={8} fill={item.color} stroke="none" /><span>{item.label}</span></div>
@@ -311,8 +312,8 @@ function SessionList({ sessions, selectedSession, onSelectSession, onNewSession,
   )
 }
 
-function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, onActivity }: {
-  sessionId: string; model: string; sessionName: string; onFirstMessage: (id: string, text: string) => void; onClose: () => void; onActivity?: (a: Activity) => void
+function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, onActivity, onPauseChange }: {
+  sessionId: string; model: string; sessionName: string; onFirstMessage: (id: string, text: string) => void; onClose: () => void; onActivity?: (a: Activity) => void; onPauseChange?: (id: string, paused: boolean) => void
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -441,9 +442,9 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
         </div>
         <div className="flex items-center gap-2">
           {paused ? (
-            <button onClick={handleResume} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
+            <button onClick={() => { setPaused(false); onPauseChange?.(sessionId, false); handleResume() }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
           ) : (
-            <button onClick={() => { abortRef.current?.abort(); setPaused(true) }} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
+            <button onClick={() => { abortRef.current?.abort(); setPaused(true); onPauseChange?.(sessionId, true) }} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
           )}
           <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><X size={14} />Close</button>
           <ChevronDown size={16} className="text-[#6B7280]" />
@@ -488,8 +489,8 @@ function Conversation({ sessionId, model, sessionName, onFirstMessage, onClose, 
   )
 }
 
-function HallConversation({ hall, onClose, onActivity }: {
-  hall: GreatHall; onClose: () => void; onActivity?: (a: Activity) => void
+function HallConversation({ hall, onClose, onActivity, onPauseChange }: {
+  hall: GreatHall; onClose: () => void; onActivity?: (a: Activity) => void; onPauseChange?: (id: string, paused: boolean) => void
 }) {
   const [messages, setMessages] = useState<HallMessage[]>([])
   const [input, setInput] = useState('')
@@ -654,11 +655,7 @@ function HallConversation({ hall, onClose, onActivity }: {
     pausedRef.current = true
     setCurrentAgentIdx(-1)
     setLoading(false)
-  }
-
-  function handleResume() {
-    setPaused(false)
-    pausedRef.current = false
+    onPauseChange?.(hall.id, true)
   }
 
   const agentColors = hall.agents.reduce((acc, name, i) => {
@@ -689,7 +686,7 @@ function HallConversation({ hall, onClose, onActivity }: {
             </div>
           )}
           {paused ? (
-            <button onClick={handleResume} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
+            <button onClick={() => { setPaused(false); pausedRef.current = false; onPauseChange?.(hall.id, false) }} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D97706] rounded-lg text-xs font-medium text-[#D97706] hover:bg-[#FFFBEB]"><Play size={14} />Resume</button>
           ) : (
             <button onClick={handlePause} disabled={!loading} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB] disabled:opacity-40 disabled:cursor-not-allowed"><Pause size={14} />Pause</button>
           )}
@@ -979,6 +976,7 @@ export default function App() {
   const [greatHalls, setGreatHalls] = useState<GreatHall[]>([])
   const [activeHall, setActiveHall] = useState<GreatHall | null>(null)
   const [hallNotes, setHallNotes] = useState<Record<string, string>>({})
+  const [pausedSessions, setPausedSessions] = useState<string[]>([])
   const hallMcpServers: Record<string, Record<string, MCPServer[]>> = {}
 
   useEffect(() => {
@@ -1010,6 +1008,14 @@ export default function App() {
   const sessions = sessionsByAgent[selectedAgent] || []
   const agent = agents.find(a => a.name === selectedAgent)
   const session = sessions.find(s => s.id === selectedSession)
+  const totalSessions = Object.values(sessionsByAgent).reduce((sum, s) => sum + s.length, 0)
+  const totalAgents = agents.length
+  const awaitingCount = agents.filter(a => !a.online).length
+  const pausedCount = pausedSessions.length
+
+  function handlePauseChange(id: string, paused: boolean) {
+    setPausedSessions(prev => paused ? [...prev, id] : prev.filter(p => p !== id))
+  }
 
   useEffect(() => {
     AGENTS_DATA.forEach(a => {
@@ -1167,14 +1173,18 @@ export default function App() {
         onSelectHall={handleSelectHall}
         onCreateGreatHall={handleCreateGreatHall}
         onDeleteHall={handleDeleteHall}
+        totalSessions={totalSessions}
+        totalAgents={totalAgents}
+        awaitingCount={awaitingCount}
+        pausedCount={pausedCount}
       />
       {activeHall ? (
-        <HallConversation hall={activeHall} onClose={handleCloseHall} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
+        <HallConversation hall={activeHall} onClose={handleCloseHall} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} onPauseChange={handlePauseChange} />
       ) : (
         <>
           <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />
           {session ? (
-            <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
+            <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} onPauseChange={handlePauseChange} />
           ) : (
             <div className="flex-1 flex items-center justify-center bg-white">
               <p className="text-sm text-[#9CA3AF]">Select a session or start a new one</p>
