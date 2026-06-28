@@ -28,6 +28,7 @@ type Session = { id: string; name: string; preview: string; unread: number }
 type Message = { role: 'user' | 'assistant'; content: string }
 type MCPServer = { name: string; url: string }
 type Activity = { user: string; time: string; text: string; status: 'done' | 'doing' | 'pending' | 'waiting' }
+type GreatHall = { id: string; name: string; agents: string[] }
 
 function IconSidebar() {
   const topIcons = [
@@ -57,7 +58,29 @@ function IconSidebar() {
   )
 }
 
-function NavSidebar({ agents, selectedAgent, onSelectAgent }: { agents: typeof AGENTS_DATA; selectedAgent: string; onSelectAgent: (n: string) => void }) {
+function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, onCreateGreatHall }: {
+  agents: typeof AGENTS_DATA; selectedAgent: string; onSelectAgent: (n: string) => void; greatHalls: GreatHall[]; onCreateGreatHall: (name: string, agentNames: string[]) => void
+}) {
+  const [showHallModal, setShowHallModal] = useState(false)
+  const [hallName, setHallName] = useState('')
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([])
+
+  function openCreateHall() {
+    setHallName('')
+    setSelectedAgents([])
+    setShowHallModal(true)
+  }
+
+  function toggleAgent(name: string) {
+    setSelectedAgents(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
+  }
+
+  function confirmHall() {
+    if (!hallName.trim() || selectedAgents.length === 0) return
+    onCreateGreatHall(hallName.trim(), selectedAgents)
+    setShowHallModal(false)
+  }
+
   return (
     <div className="w-[220px] flex-shrink-0 bg-white border-r border-[#E5E7EB] flex flex-col p-4 gap-5 overflow-y-auto">
       <div className="relative">
@@ -87,15 +110,19 @@ function NavSidebar({ agents, selectedAgent, onSelectAgent }: { agents: typeof A
         ))}
       </div>
       <div>
-        <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">CHANNEL</p>
-        {[
-          { label: 'All', count: 56 }, { label: 'SMS', count: 123 }, { label: 'Whatsapp', count: 34 },
-          { label: 'Instagram', count: 89 }, { label: 'Web', count: 89 },
-        ].map((item, i) => (
-          <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-[#6B7280] cursor-pointer hover:bg-[#F9FAFB]">
-            <span>{item.label}</span><span className="text-xs text-[#9CA3AF]">{item.count}</span>
+        <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">A GREAT HALL</p>
+        {greatHalls.map((hall) => (
+          <div key={hall.id} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[#6B7280] cursor-pointer hover:bg-[#F9FAFB] mb-1">
+            <div className="flex -space-x-1.5">
+              {hall.agents.slice(0, 3).map((name, i) => (
+                <div key={i} className="w-5 h-5 rounded-full bg-[#E5E7EB] border border-white flex items-center justify-center text-[8px] font-medium text-[#6B7280]">{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+              ))}
+              {hall.agents.length > 3 && <div className="w-5 h-5 rounded-full bg-[#E5E7EB] border border-white flex items-center justify-center text-[8px] font-medium text-[#9CA3AF]">+{hall.agents.length - 3}</div>}
+            </div>
+            <span className="truncate">{hall.name}</span>
           </div>
         ))}
+        <button onClick={openCreateHall} className="flex items-center gap-1.5 w-full mt-1 px-3 py-2 rounded-lg text-sm font-medium text-[#2878D9] hover:bg-[#F3F4F6]"><Plus size={14} />New Great Hall</button>
       </div>
       <div>
         <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">AGENTS</p>
@@ -112,6 +139,39 @@ function NavSidebar({ agents, selectedAgent, onSelectAgent }: { agents: typeof A
           </div>
         ))}
       </div>
+
+      {showHallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowHallModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-80 max-h-[500px] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-[#E5E7EB]">
+              <p className="text-sm font-semibold text-[#111827]">Create A Great Hall</p>
+            </div>
+            <div className="px-4 py-3 border-b border-[#E5E7EB]">
+              <input className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 outline-none" placeholder="Hall name" value={hallName} onChange={e => setHallName(e.target.value)} autoFocus />
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+              <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">SELECT AGENTS</p>
+              {agents.map((agent) => (
+                <label key={agent.name} className="flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer hover:bg-[#F9FAFB] text-sm">
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${selectedAgents.includes(agent.name) ? 'bg-[#2878D9] border-[#2878D9]' : 'border-[#D1D5DB]'}`}>
+                    {selectedAgents.includes(agent.name) && <Check size={12} className="text-white" />}
+                  </div>
+                  <div className="w-6 h-6 rounded-full bg-[#E5E7EB] flex items-center justify-center text-[9px] font-medium text-[#6B7280]">{agent.name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[#111827] truncate">{agent.name}</p>
+                    <p className="text-xs text-[#6B7280] truncate">{agent.specialty}</p>
+                  </div>
+                  <input type="checkbox" className="sr-only" checked={selectedAgents.includes(agent.name)} onChange={() => toggleAgent(agent.name)} />
+                </label>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t border-[#E5E7EB] flex justify-end gap-2">
+              <button onClick={() => setShowHallModal(false)} className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB]">Cancel</button>
+              <button onClick={confirmHall} className="px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]">Create Hall</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -532,6 +592,7 @@ export default function App() {
   const [mcpServers, setMcpServers] = useState<Record<string, MCPServer[]>>({})
   const [agentNotes, setAgentNotes] = useState<Record<string, string>>({})
   const [activities, setActivities] = useState<Activity[]>([])
+  const [greatHalls, setGreatHalls] = useState<GreatHall[]>([])
 
   const sessions = sessionsByAgent[selectedAgent] || []
   const agent = agents.find(a => a.name === selectedAgent)
@@ -592,6 +653,11 @@ export default function App() {
     if (selectedAgent === oldName) setSelectedAgent(newName)
   }, [selectedAgent])
 
+  const handleCreateGreatHall = useCallback((name: string, agentNames: string[]) => {
+    const id = `hall-${Date.now()}`
+    setGreatHalls(prev => [...prev, { id, name, agents: agentNames }])
+  }, [])
+
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
     fetch(`${DB_API}/sessions/${sessionId}`, {
       method: 'PATCH',
@@ -609,7 +675,7 @@ export default function App() {
   return (
     <div className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif]">
       <IconSidebar />
-      <NavSidebar agents={agents} selectedAgent={selectedAgent} onSelectAgent={(name) => { setSelectedAgent(name); setSelectedSession('') }} />
+      <NavSidebar agents={agents} selectedAgent={selectedAgent} onSelectAgent={(name) => { setSelectedAgent(name); setSelectedSession('') }} greatHalls={greatHalls} onCreateGreatHall={handleCreateGreatHall} />
       <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />
       {session ? (
         <Conversation sessionId={session.id} model={agent?.model || ''} sessionName={session.name} onFirstMessage={handleFirstMessage} onClose={() => setSelectedSession('')} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} />
