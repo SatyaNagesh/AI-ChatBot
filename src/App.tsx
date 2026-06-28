@@ -498,7 +498,7 @@ function HallConversation({ hall, onClose, onActivity }: {
   const [sessionName, setSessionName] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const sessionId = `hall-${hall.id}`
+  const sessionId = hall.id
 
   const hallName = sessionName || hall.name
 
@@ -994,6 +994,32 @@ export default function App() {
   }, [activeHall])
   useEffect(() => { localStorage.setItem('hallNotes', JSON.stringify(hallNotes)) }, [hallNotes])
 
+  useEffect(() => {
+    fetch(`${DB_API}/sessions?agent=__hall__`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.length) return
+        const halls: GreatHall[] = data
+          .map((s: Session) => {
+            try {
+              const preview = JSON.parse(s.preview || '{}')
+              if (preview.deleted) return null
+              return { id: s.id, name: s.name, agents: preview.agents || [] }
+            } catch { return null }
+          })
+          .filter(Boolean)
+        if (halls.length) {
+          setGreatHalls(halls)
+          setActiveHall(prev => {
+            if (!prev) return null
+            const stillExists = halls.find(h => h.id === prev.id)
+            return stillExists || null
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const sessions = sessionsByAgent[selectedAgent] || []
   const agent = agents.find(a => a.name === selectedAgent)
   const session = sessions.find(s => s.id === selectedSession)
@@ -1055,12 +1081,23 @@ export default function App() {
 
   const handleCreateGreatHall = useCallback((name: string, agentNames: string[]) => {
     const id = `hall-${Date.now()}`
-    setGreatHalls(prev => [...prev, { id, name, agents: agentNames }])
+    const hall: GreatHall = { id, name, agents: agentNames }
+    fetch(`${DB_API}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, agent: '__hall__', preview: JSON.stringify({ agents: agentNames }) }),
+    }).catch(() => {})
+    setGreatHalls(prev => [...prev, hall])
   }, [])
 
   const handleDeleteHall = useCallback((id: string) => {
     setGreatHalls(prev => prev.filter(h => h.id !== id))
     if (activeHall?.id === id) setActiveHall(null)
+    fetch(`${DB_API}/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preview: JSON.stringify({ deleted: true }) }),
+    }).catch(() => {})
   }, [activeHall])
 
   const handleRenameSession = useCallback((sessionId: string, name: string) => {
@@ -1093,18 +1130,39 @@ export default function App() {
   }
 
   function handleAddAgentToHall(hallId: string, agentName: string) {
-    setGreatHalls(prev => prev.map(h =>
-      h.id === hallId ? { ...h, agents: [...h.agents, agentName] } : h
-    ))
+    setGreatHalls(prev => {
+      const updated = prev.map(h =>
+        h.id === hallId ? { ...h, agents: [...h.agents, agentName] } : h
+      )
+      const hall = prev.find(h => h.id === hallId)
+      if (hall) {
+        fetch(`${DB_API}/sessions/${hallId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preview: JSON.stringify({ agents: [...hall.agents, agentName] }) }),
+        }).catch(() => {})
+      }
+      return updated
+    })
     if (activeHall?.id === hallId) {
       setActiveHall(prev => prev ? { ...prev, agents: [...prev.agents, agentName] } : null)
     }
   }
 
   function handleRemoveAgentFromHall(hallId: string, agentName: string) {
-    setGreatHalls(prev => prev.map(h =>
-      h.id === hallId ? { ...h, agents: h.agents.filter(a => a !== agentName) } : h
-    ))
+    setGreatHalls(prev => {
+      const hall = prev.find(h => h.id === hallId)
+      if (hall) {
+        fetch(`${DB_API}/sessions/${hallId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preview: JSON.stringify({ agents: hall.agents.filter(a => a !== agentName) }) }),
+        }).catch(() => {})
+      }
+      return prev.map(h =>
+        h.id === hallId ? { ...h, agents: h.agents.filter(a => a !== agentName) } : h
+      )
+    })
     if (activeHall?.id === hallId) {
       setActiveHall(prev => prev ? { ...prev, agents: prev.agents.filter(a => a !== agentName) } : null)
     }
