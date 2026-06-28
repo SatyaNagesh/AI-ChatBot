@@ -742,7 +742,7 @@ function HallConversation({ hall, onClose, onActivity }: {
               <Smile size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
               <ImageIcon size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
               <Type size={16} className="text-[#9CA3AF] cursor-pointer hover:text-[#6B7280]" />
-              {hall.agents.map((name, i) => (
+              {hall.agents.map((name) => (
                 <div key={name} className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-medium border" style={{ borderColor: agentColors[name] + '44', backgroundColor: agentColors[name] + '11', color: agentColors[name] }} title={name}>{name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
               ))}
             </div>
