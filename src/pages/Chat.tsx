@@ -222,7 +222,7 @@ export default function Chat() {
         pausedCount={pausedCount}
       />
       {activeHall ? (
-        <HallConversation hall={activeHall} onClose={handleCloseHall} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} onPauseChange={handlePauseChange} />
+        <HallConversation hall={activeHall} agents={agents} onClose={handleCloseHall} onActivity={a => setActivities(prev => [a, ...prev].slice(0, 20))} onPauseChange={handlePauseChange} />
       ) : (
         <>
           <SessionList sessions={sessions} selectedSession={selectedSession} onSelectSession={setSelectedSession} onNewSession={handleNewSession} onRenameSession={handleRenameSession} />

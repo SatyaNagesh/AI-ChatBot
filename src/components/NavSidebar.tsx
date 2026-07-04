@@ -118,7 +118,7 @@ export default function NavSidebar({ agents, selectedAgent, onSelectAgent, great
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
               <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">SELECT AGENTS</p>
-              {agents.map((agent) => (
+              {agents.filter(a => a.online).map((agent) => (
                 <label key={agent.name} className="flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer hover:bg-[#F9FAFB] text-sm">
                   <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${selectedAgents.includes(agent.name) ? 'bg-[#2878D9] border-[#2878D9]' : 'border-[#D1D5DB]'}`}>
                     {selectedAgents.includes(agent.name) && <Check size={12} className="text-white" />}
@@ -131,6 +131,9 @@ export default function NavSidebar({ agents, selectedAgent, onSelectAgent, great
                   <input type="checkbox" className="sr-only" checked={selectedAgents.includes(agent.name)} onChange={() => toggleAgent(agent.name)} />
                 </label>
               ))}
+              {agents.filter(a => !a.online).length > 0 && (
+                <p className="text-[11px] text-[#9CA3AF] mt-2 px-2">{agents.filter(a => !a.online).map(a => a.name).join(', ')} offline</p>
+              )}
             </div>
             <div className="px-4 py-3 border-t border-[#E5E7EB] flex justify-end gap-2">
               <button onClick={() => setShowHallModal(false)} className="px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB]">Cancel</button>

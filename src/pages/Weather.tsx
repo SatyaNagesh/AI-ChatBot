@@ -1,5 +1,27 @@
-import { useState, useCallback } from 'react'
-import { CloudSun, MapPin, Search, Droplets, Wind, Eye, Umbrella, Sunrise, Sunset, Loader2, AlertCircle } from 'lucide-react'
+import { Component, type ReactNode, useState, useEffect } from 'react'
+import { CloudSun, Search, Droplets, Wind, Eye, Umbrella, Sunrise, Sunset, Loader2, AlertCircle } from 'lucide-react'
+
+class WeatherBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(e: unknown) {
+    return { error: e instanceof Error ? e.message : 'Something went wrong' }
+  }
+  componentDidCatch(e: unknown) {
+    console.error('[Weather] error:', e)
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#FAFAFA]">
+          <AlertCircle size={32} className="text-[#D97706] mb-4" />
+          <p className="text-sm text-[#6B7280]">Something went wrong. Refresh the page.</p>
+          <p className="text-xs text-[#9CA3AF] mt-2 font-mono">{this.state.error}</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 type WeatherData = {
   current: {
@@ -88,7 +110,7 @@ async function geocode(city: string): Promise<GeoResult | null> {
   return { latitude: r.latitude, longitude: r.longitude, timezone: r.timezone || 'auto', name: r.name, country: r.country || '' }
 }
 
-async function fetchWeather(lat: number, lon: number, tz: string): Promise<WeatherData> {
+async function fetchWeather(lat: number, lon: number, tz: string): Promise<WeatherData | null> {
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
@@ -100,7 +122,10 @@ async function fetchWeather(lat: number, lon: number, tz: string): Promise<Weath
     wind_speed_unit: 'kmh',
   })
   const res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`)
-  return res.json()
+  if (!res.ok) return null
+  const data = await res.json()
+  if (!data.current || !data.daily || !data.hourly) return null
+  return data as WeatherData
 }
 
 type Status = 'idle' | 'loading' | 'error' | 'ready'
@@ -113,7 +138,23 @@ export default function WeatherPage() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [geo, setGeo] = useState<GeoResult | null>(null)
 
-  const search = useCallback(async (name: string) => {
+  const HYDERABAD = { latitude: 17.385, longitude: 78.4867, timezone: 'Asia/Kolkata', name: 'Hyderabad', country: 'IN' }
+
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    ;(async () => {
+      const w = await fetchWeather(HYDERABAD.latitude, HYDERABAD.longitude, HYDERABAD.timezone)
+      if (cancelled || !w) return
+      setInput(HYDERABAD.name)
+      setWeather(w)
+      setGeo(HYDERABAD)
+      setStatus('ready')
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  async function search(name: string) {
     setStatus('loading')
     setErrorMsg('')
     try {
@@ -124,6 +165,11 @@ export default function WeatherPage() {
         return
       }
       const w = await fetchWeather(g.latitude, g.longitude, g.timezone)
+      if (!w) {
+        setErrorMsg('Could not fetch weather data. Try again.')
+        setStatus('error')
+        return
+      }
       setWeather(w)
       setGeo(g)
       setStatus('ready')
@@ -131,39 +177,6 @@ export default function WeatherPage() {
       setErrorMsg('Network error. Please check your connection.')
       setStatus('error')
     }
-  }, [])
-
-  function handleLocate() {
-    if (!navigator.geolocation) {
-      setErrorMsg('Geolocation is not supported by your browser.')
-      setStatus('error')
-      return
-    }
-    setStatus('loading')
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`)
-          const data = await res.json()
-          const c = data.address?.city || data.address?.town || data.address?.village || 'Your Location'
-          const country = data.address?.country_code?.toUpperCase() || ''
-          setInput(c)
-          const w = await fetchWeather(pos.coords.latitude, pos.coords.longitude, 'auto')
-          setWeather(w)
-          setGeo({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, timezone: 'auto', name: c, country })
-          setStatus('ready')
-        } catch {
-          const w = await fetchWeather(pos.coords.latitude, pos.coords.longitude, 'auto')
-          setWeather(w)
-          setGeo({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, timezone: 'auto', name: 'Your Location', country: '' })
-          setStatus('ready')
-        }
-      },
-      () => {
-        setErrorMsg('Could not get your location. Search manually.')
-        setStatus('error')
-      }
-    )
   }
 
   const wmo = weather && geo ? getWMO(weather.current.weather_code) : null
@@ -191,7 +204,7 @@ export default function WeatherPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[#FAFAFA] overflow-y-auto" style={glowStyle()}>
+    <WeatherBoundary><div className="flex-1 flex flex-col bg-[#FAFAFA] overflow-y-auto" style={glowStyle()}>
       {/* HEADER */}
       <div className="flex items-center gap-3 px-8 py-4 border-b border-[#E5E7EB] bg-white">
         <CloudSun size={22} className="text-[#2878D9]" />
@@ -213,8 +226,11 @@ export default function WeatherPage() {
             <Search size={14} />
           </button>
         </div>
-        <button onClick={handleLocate} className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#6B7280] hover:text-[#111827] hover:border-[#D1D5DB] transition-colors">
-          <MapPin size={13} />Use my location
+        <button
+          onClick={() => search(HYDERABAD.name)}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-[#E5E7EB] rounded-lg text-xs font-medium text-[#2878D9] hover:bg-[#2878D9] hover:text-white transition-colors"
+        >
+          <CloudSun size={13} />Hyderabad
         </button>
       </div>
 
@@ -223,7 +239,7 @@ export default function WeatherPage() {
         {status === 'idle' && (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <CloudSun size={48} className="text-[#D1D5DB] mb-4" />
-            <p className="text-sm text-[#9CA3AF]">Search a city to begin</p>
+            <p className="text-sm text-[#9CA3AF]">Type a city or click <span className="text-[#2878D9] font-semibold">Hyderabad</span> above.</p>
           </div>
         )}
 
@@ -336,6 +352,6 @@ export default function WeatherPage() {
           </div>
         )}
       </div>
-    </div>
+    </div></WeatherBoundary>
   )
 }
