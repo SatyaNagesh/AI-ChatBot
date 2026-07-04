@@ -1,4 +1,4 @@
-import { Search, Inbox, House, Ticket, AudioLines, Calendar, MessageCircle, BarChart3, Building2, FolderKanban, Settings, CircleHelp } from 'lucide-react'
+import { Search, Inbox, House, Ticket, AudioLines, Calendar, MessageCircle, BarChart3, Building2, FolderKanban, Settings, CircleHelp, CloudSun } from 'lucide-react'
 import type { PageName } from '../types'
 
 type IconItem = { icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; page: PageName; label: string }
@@ -6,6 +6,7 @@ type IconItem = { icon: React.ComponentType<{ size?: number; strokeWidth?: numbe
 const topIcons: IconItem[] = [
   { icon: House, page: 'dashboard', label: 'Dashboard' },
   { icon: MessageCircle, page: 'chat', label: 'Chat' },
+  { icon: CloudSun, page: 'weather', label: 'Weather' },
   { icon: Calendar, page: 'calendar', label: 'Calendar' },
   { icon: Inbox, page: 'inbox', label: 'Inbox' },
   { icon: Ticket, page: 'tasks', label: 'Tasks' },

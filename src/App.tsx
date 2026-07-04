@@ -4,6 +4,7 @@ import IconSidebar from './components/IconSidebar'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
 import CalendarPage from './pages/Calendar'
+import WeatherPage from './pages/Weather'
 import InboxPage from './pages/Inbox'
 import TasksPage from './pages/Tasks'
 import VoicePage from './pages/Voice'
@@ -18,6 +19,7 @@ const PAGE_COMPONENTS: Record<PageName, React.ComponentType> = {
   dashboard: Dashboard,
   chat: Chat,
   calendar: CalendarPage,
+  weather: WeatherPage,
   inbox: InboxPage,
   tasks: TasksPage,
   voice: VoicePage,

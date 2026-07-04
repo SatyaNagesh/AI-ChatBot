@@ -8,4 +8,4 @@ export type HallMessage = { role: 'user' | 'assistant'; content: string; agentNa
 export type MCPServer = { name: string; url: string }
 export type Activity = { user: string; time: string; text: string; status: 'done' | 'doing' | 'pending' | 'waiting' }
 export type GreatHall = { id: string; name: string; agents: string[] }
-export type PageName = 'dashboard' | 'chat' | 'calendar' | 'inbox' | 'tasks' | 'voice' | 'search' | 'analytics' | 'projects' | 'files' | 'settings' | 'help'
+export type PageName = 'dashboard' | 'chat' | 'calendar' | 'inbox' | 'tasks' | 'voice' | 'search' | 'analytics' | 'projects' | 'files' | 'settings' | 'help' | 'weather'
