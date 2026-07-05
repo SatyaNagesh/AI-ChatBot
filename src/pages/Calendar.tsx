@@ -13,7 +13,7 @@ type CalendarEvent = {
 }
 
 type TaskItem = {
-  id: string; title: string; description: string; priority: string; dueDate: string; createdAt: string
+  id: string; title: string; description: string; priority: string; dueDate: string; createdAt: string; column: string
 }
 
 type Column = 'To Do' | 'In Progress' | 'In Review' | 'Done'
@@ -33,19 +33,6 @@ function loadEvents(): CalendarEvent[] {
   } catch { return [] }
 }
 
-function loadTasks(): TaskItem[] {
-  try {
-    const data = localStorage.getItem(TASKS_KEY)
-    if (!data) return []
-    const parsed = JSON.parse(data)
-    const all: TaskItem[] = []
-    for (const col of ['To Do', 'In Progress', 'In Review', 'Done']) {
-      if (Array.isArray(parsed[col])) all.push(...parsed[col])
-    }
-    return all.filter(t => t.dueDate)
-  } catch { return [] }
-}
-
 function getDateFromSessionId(id: string): string | null {
   const match = id.match(/-(\d{13})$/)
   if (!match) return null
@@ -57,12 +44,12 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-function loadAllTasks(): (TaskItem & { column: string })[] {
+function loadAllTasks(): TaskItem[] {
   try {
     const data = localStorage.getItem(TASKS_KEY)
     if (!data) return []
     const parsed = JSON.parse(data)
-    const all: (TaskItem & { column: string })[] = []
+    const all: TaskItem[] = []
     for (const col of ['To Do', 'In Progress', 'In Review', 'Done'] as Column[]) {
       if (Array.isArray(parsed[col])) {
         all.push(...parsed[col].map((t: TaskItem) => ({ ...t, column: col })))
@@ -79,7 +66,7 @@ function loadFullTaskBoard(): Record<Column, TaskItem[]> {
     const parsed = JSON.parse(data)
     const result: Record<Column, TaskItem[]> = { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] }
     for (const col of ['To Do', 'In Progress', 'In Review', 'Done'] as Column[]) {
-      if (Array.isArray(parsed[col])) result[col] = parsed[col]
+      if (Array.isArray(parsed[col])) result[col] = parsed[col].map((t: TaskItem) => ({ ...t, column: col }))
     }
     return result
   } catch { return { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] } }
@@ -231,6 +218,7 @@ export default function CalendarPage() {
         priority: 'Medium',
         dueDate: selectedDate,
         createdAt: new Date().toISOString(),
+        column: 'To Do',
       }
       board['To Do'] = [newTask, ...board['To Do']]
       localStorage.setItem(TASKS_KEY, JSON.stringify(board))
