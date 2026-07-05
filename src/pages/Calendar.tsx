@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, MessageCircle, AlertCircle, Clock, Trash2 } from 'lucide-react'
 import { DB_API } from '../data/agents'
 
@@ -16,8 +16,9 @@ type TaskItem = {
   id: string; title: string; description: string; priority: string; dueDate: string
 }
 
+type SessionItem = { id: string; name: string; date: string }
 type DayData = {
-  date: string; tasks: TaskItem[]; events: CalendarEvent[]; sessions: { id: string; name: string; msgs: number; time: string }[]; level: number
+  date: string; tasks: TaskItem[]; events: CalendarEvent[]; sessions: SessionItem[]; level: number
 }
 
 const STORAGE_KEY = 'ai-chatbot-calendar-events'
@@ -63,7 +64,7 @@ export default function CalendarPage() {
   )
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tasks, setTasks] = useState<TaskItem[]>([])
-  const [sessions, setSessions] = useState<{ id: string; name: string; date: string }[]>([])
+  const [sessions, setSessions] = useState<SessionItem[]>([])
   const [showEventModal, setShowEventModal] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [formTitle, setFormTitle] = useState('')
@@ -77,15 +78,18 @@ export default function CalendarPage() {
     setTasks(loadTasks())
     fetch(`${DB_API}/sessions`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
-        const parsed = data
+        const parsed: SessionItem[] = data
           .filter((s: any) => {
             try {
               const p = JSON.parse(s.preview || '{}')
               return !p.deleted
             } catch { return true }
           })
-          .map((s: any) => ({ id: s.id, name: s.name, date: getDateFromSessionId(s.id) }))
-          .filter((s: any) => s.date)
+          .map((s: any) => {
+            const d = getDateFromSessionId(s.id)
+            return d ? { id: s.id, name: s.name, date: d } : null
+          })
+          .filter((s): s is SessionItem => s !== null)
         setSessions(parsed)
       }
     }).catch(() => {})
@@ -119,12 +123,12 @@ export default function CalendarPage() {
   const daysInYear = (todayYear % 4 === 0 && (todayYear % 100 !== 0 || todayYear % 400 === 0)) ? 366 : 365
   const heatmapWeeks = Math.ceil((startDay + daysInYear) / 7)
 
-  function getHeatLevel(dateStr: string): number {
+  function getHeatLevel(dateStr: string) {
     const d = allDates.find(a => a.date === dateStr)
     return d ? d.level : 0
   }
 
-  function getHeatDates(): { date: string; level: number }[] {
+  function getHeatDates() {
     const result: { date: string; level: number }[] = []
     for (let i = 0; i < daysInYear; i++) {
       const d = new Date(todayYear, 0, 1 + i)
