@@ -42,6 +42,26 @@ function emptyBoard(): Record<Column, Task[]> {
   return { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] }
 }
 
+function defaultTasks(): Record<Column, Task[]> {
+  return {
+    'To Do': [
+      { id: 'default1', title: 'Agent Memory Persistence', description: 'Agents remember context across conversations in the same session', priority: 'High', dueDate: '2026-07-11', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default2', title: 'Global Conversation Search', description: 'Cmd+K / Spotlight-style search across all conversations and agents', priority: 'High', dueDate: '2026-07-10', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default3', title: 'File Upload & Analysis', description: 'Drag & drop code, PDFs, images for agents to analyze directly in chat', priority: 'Medium', dueDate: '2026-07-12', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default4', title: 'Side-by-Side Agent Compare', description: 'Send one prompt to multiple agents and compare responses in split view', priority: 'Medium', dueDate: '2026-07-14', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default5', title: 'Prompt Library', description: 'Save, organize, and reuse prompt templates; assign to specific agents', priority: 'Medium', dueDate: '2026-07-15', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default6', title: 'Knowledge Base Page', description: 'Persistent docs/notes page that all agents can reference during conversations', priority: 'Medium', dueDate: '2026-07-18', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default7', title: 'Analytics Dashboard', description: 'Usage stats: messages per agent, response times, busiest days, trends', priority: 'Low', dueDate: '2026-07-20', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default8', title: 'Export & Share', description: 'Export conversations as markdown, PDF, or generate a shareable link', priority: 'Low', dueDate: '2026-07-22', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default9', title: 'Dark Mode', description: 'Light/dark theme toggle across the entire app', priority: 'Low', dueDate: '2026-07-25', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default10', title: 'Voice Input', description: 'Microphone button with speech-to-text for hands-free chat', priority: 'Low', dueDate: '2026-07-28', createdAt: '2026-07-05T00:00:00.000Z' },
+    ],
+    'In Progress': [],
+    'In Review': [],
+    'Done': [],
+  }
+}
+
 function loadFromStorage(): Record<Column, Task[]> {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -56,7 +76,7 @@ function loadFromStorage(): Record<Column, Task[]> {
       return valid
     }
   } catch {}
-  return emptyBoard()
+  return defaultTasks()
 }
 
 function saveToStorage(tasks: Record<Column, Task[]>) {
