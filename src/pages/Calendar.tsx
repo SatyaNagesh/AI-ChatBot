@@ -4,7 +4,7 @@ import { DB_API } from '../data/agents'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const HEAT_COLORS = ['#E5E7EB', '#D1D5DB', '#9CA3AF', '#525252', '#171717']
+const HEAT_COLORS = ['#EBEDF0', '#9BE9A8', '#40C463', '#30A14E', '#216E39']
 const PRIORITY_COLORS: Record<string, string> = { High: '#EF4444', Medium: '#D97706', Low: '#6B7280' }
 const EVENT_COLORS = ['#2878D9', '#8B5CF6', '#D97706', '#059669', '#DC2626', '#0891B2']
 
@@ -226,7 +226,7 @@ export default function CalendarPage() {
                       return (
                         <div
                           key={d}
-                          className="w-4 h-4 rounded-sm cursor-pointer transition-transform hover:scale-110 border border-[#D1D5DB]"
+                          className="w-4 h-4 rounded-sm cursor-pointer transition-transform hover:scale-110"
                           style={{ backgroundColor: HEAT_COLORS[hd.level] }}
                           title={`${hd.date}: ${hd.level} activities`}
                           onClick={() => setSelectedDate(hd.date)}
@@ -239,7 +239,7 @@ export default function CalendarPage() {
             </div>
             <div className="flex items-center gap-1 ml-2 text-[10px] text-[#9CA3AF]">
               <span>Less</span>
-              {HEAT_COLORS.map((c, i) => <div key={i} className="w-3 h-3 rounded-sm border border-[#D1D5DB]" style={{ backgroundColor: c }} />)}
+              {HEAT_COLORS.map((c, i) => <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} />)}
               <span>More</span>
             </div>
           </div>
