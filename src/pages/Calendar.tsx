@@ -4,7 +4,7 @@ import { DB_API } from '../data/agents'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const HEAT_COLORS = ['#EBEDF0', '#9BE9A8', '#40C463', '#30A14E', '#216E39']
+const HEAT_COLORS = ['#EBEDF0', '#D1D5DB', '#9CA3AF', '#525252', '#171717']
 const PRIORITY_COLORS: Record<string, string> = { High: '#EF4444', Medium: '#D97706', Low: '#6B7280' }
 const EVENT_COLORS = ['#2878D9', '#8B5CF6', '#D97706', '#059669', '#DC2626', '#0891B2']
 
