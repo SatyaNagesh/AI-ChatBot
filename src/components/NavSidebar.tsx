@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Plus, MoreHorizontal, Trash2, Check, Circle } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Trash2, Check, Circle, MessageCircle, X } from 'lucide-react'
 import type { Agent, GreatHall } from '../types'
-import { AGENT_COLORS } from '../data/agents'
+import { DB_API, AGENT_COLORS } from '../data/agents'
 import { getInitials } from '../utils/helpers'
+
+type SearchResult = {
+  session_id: string; session_name: string; role: string; content: string
+}
 
 export default function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall, totalSessions, totalAgents, awaitingCount, pausedCount }: {
   agents: Agent[]; selectedAgent: string; onSelectAgent: (n: string) => void;
@@ -16,13 +20,47 @@ export default function NavSidebar({ agents, selectedAgent, onSelectAgent, great
   const [hallMenuOpen, setHallMenuOpen] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setHallMenuOpen(null)
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowResults(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([])
+      setShowResults(false)
+      return
+    }
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`${DB_API}/messages?q=${encodeURIComponent(searchQuery.trim())}`)
+        const data = await res.json()
+        setSearchResults(Array.isArray(data) ? data : [])
+        setShowResults(true)
+      } catch { setSearchResults([]) }
+      setSearching(false)
+    }, 300)
+  }, [searchQuery])
+
+  function selectSearchResult(_sessionId: string) {
+    // Find which agent this session belongs to and switch to it
+    onSelectAgent('')
+    setShowResults(false)
+    setSearchQuery('')
+  }
 
   function openCreateHall() {
     setHallName('')
@@ -42,9 +80,39 @@ export default function NavSidebar({ agents, selectedAgent, onSelectAgent, great
 
   return (
     <div className="w-[220px] flex-shrink-0 bg-white border-r border-[#E5E7EB] flex flex-col p-4 gap-5 overflow-y-auto">
-      <div className="relative">
+      <div className="relative" ref={searchRef}>
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-        <input className="w-full h-10 pl-9 pr-3 rounded-[10px] border border-[#E5E7EB] bg-white text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none" placeholder="Search chat" />
+        <input
+          className="w-full h-10 pl-9 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-sm text-[#111827] placeholder:text-[#9CA3AF] outline-none"
+          placeholder="Search chat"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          onFocus={() => { if (searchResults.length) setShowResults(true) }}
+        />
+        {searchQuery && (
+          <button onClick={() => { setSearchQuery(''); setSearchResults([]); setShowResults(false) }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#6B7280]">
+            <X size={14} />
+          </button>
+        )}
+
+        {showResults && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E5E7EB] rounded-xl shadow-lg max-h-80 overflow-y-auto z-50">
+            {searching && <p className="text-xs text-[#9CA3AF] text-center py-4">Searching...</p>}
+            {!searching && searchResults.length === 0 && (
+              <p className="text-xs text-[#9CA3AF] text-center py-4">No results found</p>
+            )}
+            {!searching && searchResults.map((r, i) => (
+              <button key={`${r.session_id}-${i}`} className="w-full text-left px-3 py-2.5 hover:bg-[#F9FAFB] border-b border-[#F3F4F6] last:border-0"
+                onClick={() => selectSearchResult(r.session_id)}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <MessageCircle size={12} className="text-[#9CA3AF] shrink-0" />
+                  <span className="text-xs font-medium text-[#111827] truncate">{r.session_name || r.session_id}</span>
+                </div>
+                <p className="text-[11px] text-[#6B7280] line-clamp-1">{r.content}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div>
         <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider mb-2">INBOX</p>

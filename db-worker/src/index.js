@@ -35,6 +35,16 @@ export default {
       if (url.pathname === '/messages') {
         if (request.method === 'GET') {
           const sessionId = url.searchParams.get('session_id');
+          const q = url.searchParams.get('q');
+          if (q) {
+            const { results } = await env.DB.prepare(
+              `SELECT m.session_id, m.role, m.content, s.name as session_name
+               FROM messages m JOIN sessions s ON m.session_id = s.id
+               WHERE m.content LIKE ? OR s.name LIKE ?
+               ORDER BY m.created_at DESC LIMIT 50`
+            ).bind(`%${q}%`, `%${q}%`).all();
+            return Response.json(results || [], { headers: cors });
+          }
           const { results } = await env.DB.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC').bind(sessionId).all();
           return Response.json(results || [], { headers: cors });
         }
