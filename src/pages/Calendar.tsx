@@ -126,8 +126,11 @@ export default function CalendarPage() {
   const heatmapWeeks = Math.ceil((startDay + daysInYear) / 7)
 
   function getHeatLevel(dateStr: string) {
-    const d = allDates.find(a => a.date === dateStr)
-    return d ? d.level : 0
+    const dayTasks = tasks.filter(t => t.dueDate === dateStr).length
+    const dayEvents = events.filter(e => e.date === dateStr).length
+    const daySessions = sessions.filter(s => s.date === dateStr).length
+    const total = dayTasks + dayEvents + daySessions
+    return total === 0 ? 0 : total <= 2 ? 1 : total <= 5 ? 2 : total <= 10 ? 3 : 4
   }
 
   function getHeatDates() {
