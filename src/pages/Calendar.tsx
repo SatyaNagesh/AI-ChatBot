@@ -16,7 +16,7 @@ type TaskItem = {
   id: string; title: string; description: string; priority: string; dueDate: string
 }
 
-type SessionItem = { id: string; name: string; date: string }
+type SessionItem = { id: string; name: string; date: string; time: string }
 type DayData = {
   date: string; tasks: TaskItem[]; events: CalendarEvent[]; sessions: SessionItem[]; level: number
 }
@@ -87,7 +87,9 @@ export default function CalendarPage() {
           })
           .map((s: any) => {
             const d = getDateFromSessionId(s.id)
-            return d ? { id: s.id, name: s.name, date: d } : null
+            const ts = s.id.match(/-(\d{13})$/)
+            const time = ts ? new Date(Number(ts[1])).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+            return d ? { id: s.id, name: s.name, date: d, time } : null
           })
           .filter((s): s is SessionItem => s !== null)
         setSessions(parsed)
@@ -139,7 +141,7 @@ export default function CalendarPage() {
     return result
   }
 
-  function openNewEvent(date: string) {
+  function openNewEvent() {
     setEditingEvent(null)
     setFormTitle('')
     setFormTime('')
@@ -238,7 +240,7 @@ export default function CalendarPage() {
               <button onClick={() => setView('calendar')} className={`px-3 py-1.5 text-xs font-medium ${view === 'calendar' ? 'bg-[#2878D9] text-white' : 'text-[#6B7280] hover:bg-[#F9FAFB]'}`}>Month</button>
               <button onClick={() => setView('heatmap')} className={`px-3 py-1.5 text-xs font-medium ${view === 'heatmap' ? 'bg-[#2878D9] text-white' : 'text-[#6B7280] hover:bg-[#F9FAFB]'}`}>Heatmap</button>
             </div>
-            <button onClick={() => openNewEvent(selectedDate)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><Plus size={14} />Add Event</button>
+            <button onClick={openNewEvent} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-medium hover:bg-[#1F2937]"><Plus size={14} />Add Event</button>
           </div>
         </div>
 
