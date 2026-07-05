@@ -234,7 +234,7 @@ export default function WeatherPage() {
         </button>
       </div>
 
-      <div className="flex-1 max-w-4xl w-full mx-auto px-8 py-8">
+      <div className="flex-1 px-8 py-8">
         {/* IDLE STATE */}
         {status === 'idle' && (
           <div className="flex flex-col items-center justify-center py-32 text-center">
