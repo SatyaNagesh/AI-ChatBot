@@ -5,6 +5,8 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors, status: 204 });
 
     try {
+      await env.DB.prepare('CREATE TABLE IF NOT EXISTS memories (key TEXT PRIMARY KEY, value TEXT, created_at DEFAULT CURRENT_TIMESTAMP, updated_at DEFAULT CURRENT_TIMESTAMP)').run();
+
       if (url.pathname === '/sessions') {
         if (request.method === 'GET') {
           const agent = url.searchParams.get('agent');
@@ -53,6 +55,27 @@ export default {
           await env.DB.prepare('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)').bind(session_id, role, content).run();
           return Response.json({ ok: true }, { headers: cors });
         }
+      }
+
+      if (url.pathname === '/memory') {
+        if (request.method === 'GET') {
+          const { results } = await env.DB.prepare('SELECT key, value FROM memories ORDER BY updated_at DESC').all();
+          return Response.json(results || [], { headers: cors });
+        }
+        if (request.method === 'POST') {
+          const { key, value } = await request.json();
+          if (!key || value === undefined) return new Response('key and value required', { status: 400 });
+          await env.DB.prepare(
+            'INSERT INTO memories (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP'
+          ).bind(key, value, value).run();
+          return Response.json({ ok: true }, { headers: cors });
+        }
+      }
+
+      const memMatch = url.pathname.match(/^\/memory\/(.+)$/);
+      if (memMatch && request.method === 'DELETE') {
+        await env.DB.prepare('DELETE FROM memories WHERE key = ?').bind(memMatch[1]).run();
+        return Response.json({ ok: true }, { headers: cors });
       }
 
       return new Response('Not found', { status: 404 });

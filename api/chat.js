@@ -2,6 +2,7 @@ const TOKENLB_KEY = 'sk-mOpKxPG24lnBWjrJ2IEw5vfisXSuEqD2EStVYLhznjRTWME4';
 const BLUESMINDS_KEY = 'sk-KmTYfHsUASkvQSHDx1WIZfQZyWfvALCijVk2Q65puUGqVO4P';
 const TOKENLB_URL = 'https://tokenlb.net/v1/chat/completions';
 const BLUESMINDS_URL = 'https://api.bluesminds.com/v1/chat/completions';
+const DB_API = 'https://ai-chatbot-api.satyanagesh-r.workers.dev';
 
 const MODEL_ROUTES = {
   'claude-opus-4-8': TOKENLB_URL, 'claude-opus-4-7': TOKENLB_URL,
@@ -20,11 +21,24 @@ export default async function handler(req, res) {
     const { messages, model } = req.body;
     if (!model) { res.status(400).json({ error: 'model required' }); return; }
 
+    // Fetch shared memories and inject as context
+    let memoryContext = '';
+    try {
+      const memRes = await fetch(`${DB_API}/memory`);
+      if (memRes.ok) {
+        const memories = await memRes.json();
+        if (Array.isArray(memories) && memories.length > 0) {
+          memoryContext = '\n\nShared Memory (facts remembered across all conversations):\n' +
+            memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+        }
+      }
+    } catch {}
+
     const apiUrl = MODEL_ROUTES[model] || TOKENLB_URL;
     const apiKey = apiUrl === BLUESMINDS_URL ? BLUESMINDS_KEY : TOKENLB_KEY;
 
     const fullMessages = [
-      { role: 'system', content: `You are ${model}. Reply helpfully and concisely.` },
+      { role: 'system', content: `You are ${model}. Reply helpfully and concisely.${memoryContext}` },
       ...(messages || []),
     ];
 

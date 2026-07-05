@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Paperclip, Smile, Pencil, Check, X, Plus } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Paperclip, Smile, Pencil, Check, X, Plus, Trash2, Brain } from 'lucide-react'
 import type { Agent, MCPServer, Activity, GreatHall } from '../types'
-import { AGENT_COLORS, AGENTS_DATA } from '../data/agents'
+import { DB_API, AGENT_COLORS, AGENTS_DATA } from '../data/agents'
 import { getInitials } from '../utils/helpers'
 
 export default function InfoPanel({ agent, mcpServers, onRenameAgent, onAddMCPServer, notes, onNotesChange, activities,
@@ -17,6 +17,69 @@ export default function InfoPanel({ agent, mcpServers, onRenameAgent, onAddMCPSe
   const [mcpName, setMcpName] = useState('')
   const [mcpUrl, setMcpUrl] = useState('')
   const [showAddAgent, setShowAddAgent] = useState(false)
+
+  const [memories, setMemories] = useState<{ key: string; value: string }[]>([])
+  const [memoryKey, setMemoryKey] = useState('')
+  const [memoryValue, setMemoryValue] = useState('')
+  const [showMemoryInput, setShowMemoryInput] = useState(false)
+
+  useEffect(() => {
+    fetch(`${DB_API}/memory`).then(r => r.json()).then(data => { if (Array.isArray(data)) setMemories(data) }).catch(() => {})
+  }, [])
+
+  function addMemory() {
+    if (!memoryKey.trim() || !memoryValue.trim()) return
+    fetch(`${DB_API}/memory`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: memoryKey.trim(), value: memoryValue.trim() }),
+    }).then(() => {
+      setMemories(prev => [...prev.filter(m => m.key !== memoryKey.trim()), { key: memoryKey.trim(), value: memoryValue.trim() }])
+      setMemoryKey(''); setMemoryValue(''); setShowMemoryInput(false)
+    }).catch(() => {})
+  }
+
+  function deleteMemory(key: string) {
+    fetch(`${DB_API}/memory/${encodeURIComponent(key)}`, { method: 'DELETE' }).then(() => {
+      setMemories(prev => prev.filter(m => m.key !== key))
+    }).catch(() => {})
+  }
+
+  const SharedMemorySection = () => (
+    <div className="border-t border-[#E5E7EB]">
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-[#9CA3AF] tracking-wider">SHARED MEMORY</p>
+          <button onClick={() => setShowMemoryInput(!showMemoryInput)} className="text-[#2878D9] hover:text-[#1D5FA8]"><Plus size={14} /></button>
+        </div>
+        {showMemoryInput && (
+          <div className="space-y-1.5 mb-3 bg-[#F9FAFB] rounded-lg p-3 border border-[#E5E7EB]">
+            <input className="w-full text-xs border border-[#E5E7EB] rounded px-2 py-1 outline-none" placeholder="Key (e.g. user-name)" value={memoryKey} onChange={e => setMemoryKey(e.target.value)} />
+            <input className="w-full text-xs border border-[#E5E7EB] rounded px-2 py-1 outline-none" placeholder="Value (e.g. Satya)" value={memoryValue} onChange={e => setMemoryValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addMemory() }} />
+            <div className="flex gap-2">
+              <button onClick={addMemory} className="text-xs font-medium text-[#22C55E]">Save</button>
+              <button onClick={() => setShowMemoryInput(false)} className="text-xs font-medium text-[#EF4444]">Cancel</button>
+            </div>
+          </div>
+        )}
+        {memories.length === 0 ? (
+          <p className="text-xs text-[#9CA3AF] italic">No shared memories</p>
+        ) : (
+          <div className="space-y-1">
+            {memories.map(m => (
+              <div key={m.key} className="flex items-start gap-2 text-xs bg-[#F9FAFB] rounded-lg px-3 py-2 group">
+                <Brain size={12} className="text-[#9CA3AF] mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-[#111827]">{m.key}:</span>{' '}
+                  <span className="text-[#6B7280]">{m.value}</span>
+                </div>
+                <button onClick={() => deleteMemory(m.key)} className="opacity-0 group-hover:opacity-100 text-[#EF4444] hover:text-[#DC2626]"><Trash2 size={11} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   if (hall && hallAgents && allAgents) {
     const agentColors = hallAgents.reduce((acc, a, i) => {
@@ -108,6 +171,7 @@ export default function InfoPanel({ agent, mcpServers, onRenameAgent, onAddMCPSe
             )}
           </div>
         </div>
+        <SharedMemorySection />
       </div>
     )
   }
@@ -182,7 +246,7 @@ export default function InfoPanel({ agent, mcpServers, onRenameAgent, onAddMCPSe
         </div>
       </div>
 
-      <div className="px-5 py-4 flex-1">
+      <div className="px-5 py-4">
         <p className="text-xs font-semibold text-[#9CA3AF] tracking-wider mb-3">ACTIVITY</p>
         <div className="space-y-4">
           {activities.length === 0 ? <p className="text-xs text-[#9CA3AF] italic">No recent activity</p> : (
@@ -199,6 +263,7 @@ export default function InfoPanel({ agent, mcpServers, onRenameAgent, onAddMCPSe
           )}
         </div>
       </div>
+      <SharedMemorySection />
     </div>
   )
 }

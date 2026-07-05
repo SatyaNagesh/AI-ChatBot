@@ -163,7 +163,10 @@ export default function TasksPage() {
   }, [])
 
   useEffect(() => {
-    if (!loading) saveToStorage(tasks)
+    if (!loading) {
+      saveToStorage(tasks)
+      window.dispatchEvent(new CustomEvent('tasks-updated'))
+    }
   }, [tasks, loading])
 
   const addToast = useCallback((msg: string) => {

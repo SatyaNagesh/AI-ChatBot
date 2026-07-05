@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, MessageCircle, AlertCircle, Clock, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, CalendarDays, MessageCircle, AlertCircle, Clock, Trash2, CheckSquare, ListTodo } from 'lucide-react'
 import { DB_API } from '../data/agents'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -13,8 +13,10 @@ type CalendarEvent = {
 }
 
 type TaskItem = {
-  id: string; title: string; description: string; priority: string; dueDate: string
+  id: string; title: string; description: string; priority: string; dueDate: string; createdAt: string
 }
+
+type Column = 'To Do' | 'In Progress' | 'In Review' | 'Done'
 
 type SessionItem = { id: string; name: string; date: string; time: string }
 type DayData = {
@@ -55,6 +57,34 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
+function loadAllTasks(): (TaskItem & { column: string })[] {
+  try {
+    const data = localStorage.getItem(TASKS_KEY)
+    if (!data) return []
+    const parsed = JSON.parse(data)
+    const all: (TaskItem & { column: string })[] = []
+    for (const col of ['To Do', 'In Progress', 'In Review', 'Done'] as Column[]) {
+      if (Array.isArray(parsed[col])) {
+        all.push(...parsed[col].map((t: TaskItem) => ({ ...t, column: col })))
+      }
+    }
+    return all
+  } catch { return [] }
+}
+
+function loadFullTaskBoard(): Record<Column, TaskItem[]> {
+  try {
+    const data = localStorage.getItem(TASKS_KEY)
+    if (!data) return { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] }
+    const parsed = JSON.parse(data)
+    const result: Record<Column, TaskItem[]> = { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] }
+    for (const col of ['To Do', 'In Progress', 'In Review', 'Done'] as Column[]) {
+      if (Array.isArray(parsed[col])) result[col] = parsed[col]
+    }
+    return result
+  } catch { return { 'To Do': [], 'In Progress': [], 'In Review': [], 'Done': [] } }
+}
+
 export default function CalendarPage() {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -71,11 +101,13 @@ export default function CalendarPage() {
   const [formTime, setFormTime] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [formColor, setFormColor] = useState(EVENT_COLORS[0])
+  const [addToTodo, setAddToTodo] = useState(true)
+  const [toasts, setToasts] = useState<{ id: string; msg: string }[]>([])
   const [view, setView] = useState<'calendar' | 'heatmap'>('calendar')
 
   useEffect(() => {
     setEvents(loadEvents())
-    setTasks(loadTasks())
+    setTasks(loadAllTasks())
     fetch(`${DB_API}/sessions`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) {
         const parsed: SessionItem[] = data
@@ -95,6 +127,9 @@ export default function CalendarPage() {
         setSessions(parsed)
       }
     }).catch(() => {})
+    const handleTaskUpdate = () => setTasks(loadAllTasks())
+    window.addEventListener('tasks-updated', handleTaskUpdate)
+    return () => window.removeEventListener('tasks-updated', handleTaskUpdate)
   }, [])
 
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -102,7 +137,7 @@ export default function CalendarPage() {
 
   const allDates: DayData[] = Array.from({ length: daysInMonth }, (_, i) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
-    const dayTasks = tasks.filter(t => t.dueDate === dateStr)
+    const dayTasks = tasks.filter(t => t.dueDate === dateStr || (t.createdAt && t.createdAt.substring(0, 10) === dateStr))
     const dayEvents = events.filter(e => e.date === dateStr)
     const daySessions = sessions.filter(s => s.date === dateStr)
     const msgCount = sessions.filter(s => s.date === dateStr).length
@@ -126,7 +161,7 @@ export default function CalendarPage() {
   const heatmapWeeks = Math.ceil((startDay + daysInYear) / 7)
 
   function getHeatLevel(dateStr: string) {
-    const dayTasks = tasks.filter(t => t.dueDate === dateStr).length
+    const dayTasks = tasks.filter(t => t.dueDate === dateStr || (t.createdAt && t.createdAt.substring(0, 10) === dateStr)).length
     const dayEvents = events.filter(e => e.date === dateStr).length
     const daySessions = sessions.filter(s => s.date === dateStr).length
     const total = dayTasks + dayEvents + daySessions
@@ -150,6 +185,18 @@ export default function CalendarPage() {
     setFormTime('')
     setFormDesc('')
     setFormColor(EVENT_COLORS[0])
+    setAddToTodo(true)
+    setShowEventModal(true)
+  }
+
+  function onDayClick(dateStr: string) {
+    setSelectedDate(dateStr)
+    setEditingEvent(null)
+    setFormTitle('')
+    setFormTime('')
+    setFormDesc('')
+    setFormColor(EVENT_COLORS[0])
+    setAddToTodo(true)
     setShowEventModal(true)
   }
 
@@ -162,6 +209,12 @@ export default function CalendarPage() {
     setShowEventModal(true)
   }
 
+  function addToast(msg: string) {
+    const id = generateId()
+    setToasts(prev => [...prev, { id, msg }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
+  }
+
   function saveEvent() {
     if (!formTitle.trim()) return
     const updated = editingEvent
@@ -169,6 +222,22 @@ export default function CalendarPage() {
       : [...events, { id: generateId(), title: formTitle.trim(), date: selectedDate, time: formTime, description: formDesc.trim(), color: formColor }]
     setEvents(updated)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+    if (addToTodo && !editingEvent) {
+      const board = loadFullTaskBoard()
+      const newTask: TaskItem = {
+        id: generateId(),
+        title: formTitle.trim(),
+        description: formDesc.trim() || (formTime ? `Time: ${formTime}` : ''),
+        priority: 'Medium',
+        dueDate: selectedDate,
+        createdAt: new Date().toISOString(),
+      }
+      board['To Do'] = [newTask, ...board['To Do']]
+      localStorage.setItem(TASKS_KEY, JSON.stringify(board))
+      window.dispatchEvent(new CustomEvent('tasks-updated'))
+      setTasks(loadAllTasks())
+      addToast('Task is listed inside the todo')
+    }
     setShowEventModal(false)
   }
 
@@ -272,7 +341,7 @@ export default function CalendarPage() {
                     return (
                       <button
                         key={day.date}
-                        onClick={() => setSelectedDate(day.date)}
+                        onClick={() => onDayClick(day.date)}
                         className={`min-h-[80px] rounded-lg flex flex-col items-start p-1.5 relative text-sm transition-colors border ${
                           selected ? 'bg-[#EBF4FF] border-[#2878D9]' : todayMatch ? 'bg-[#FAFAFA] border-[#D1D5DB]' : 'border-transparent hover:bg-[#F9FAFB]'
                         }`}
@@ -318,72 +387,96 @@ export default function CalendarPage() {
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
-              {selectedDay && selectedDay.level === 0 && (
-                <p className="text-xs text-[#9CA3AF] text-center py-8">No activity on this day</p>
-              )}
-
-              {selectedDay && selectedDay.tasks.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <AlertCircle size={13} className="text-[#EF4444]" />
-                    <span className="text-xs font-semibold text-[#111827]">Tasks Due</span>
-                    <span className="text-[10px] text-[#9CA3AF]">({selectedDay.tasks.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {selectedDay.tasks.map(t => (
-                      <div key={t.id} className="text-xs bg-[#FEF2F2] rounded-lg px-3 py-2 border-l-2" style={{ borderLeftColor: PRIORITY_COLORS[t.priority] || '#6B7280' }}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-[#111827]">{t.title}</span>
-                          <span className="text-[10px] font-medium" style={{ color: PRIORITY_COLORS[t.priority] }}>{t.priority}</span>
+              {selectedDay && (() => {
+                const createdTasks = selectedDay.tasks.filter(t => t.createdAt && t.createdAt.substring(0, 10) === selectedDay.date)
+                const dueTasks = selectedDay.tasks.filter(t => t.dueDate === selectedDay.date && !(t.createdAt && t.createdAt.substring(0, 10) === selectedDay.date))
+                const hasAny = createdTasks.length > 0 || dueTasks.length > 0 || selectedDay.events.length > 0 || selectedDay.sessions.length > 0
+                if (!hasAny) return <p className="text-xs text-[#9CA3AF] text-center py-8">No activity on this day</p>
+                return (
+                  <>
+                    {createdTasks.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <ListTodo size={13} className="text-[#2878D9]" />
+                          <span className="text-xs font-semibold text-[#111827]">Tasks Created</span>
+                          <span className="text-[10px] text-[#9CA3AF]">({createdTasks.length})</span>
                         </div>
-                        {t.description && <p className="text-[#6B7280] mt-0.5">{t.description}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedDay && selectedDay.events.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <CalendarDays size={13} className="text-[#D97706]" />
-                    <span className="text-xs font-semibold text-[#111827]">Events</span>
-                    <span className="text-[10px] text-[#9CA3AF]">({selectedDay.events.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {selectedDay.events.map(e => (
-                      <div key={e.id} className="text-xs bg-[#FFFBEB] rounded-lg px-3 py-2 border-l-2 cursor-pointer hover:bg-[#FFF7E6]" style={{ borderLeftColor: e.color }} onClick={() => openEditEvent(e)}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-[#111827]">{e.title}</span>
-                          {e.time && <span className="text-[10px] text-[#6B7280]"><Clock size={10} className="inline mr-0.5" />{e.time}</span>}
-                        </div>
-                        {e.description && <p className="text-[#6B7280] mt-0.5">{e.description}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedDay && selectedDay.sessions.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <MessageCircle size={13} className="text-[#2878D9]" />
-                    <span className="text-xs font-semibold text-[#111827]">Conversations</span>
-                    <span className="text-[10px] text-[#9CA3AF]">({selectedDay.sessions.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {selectedDay.sessions.map(s => (
-                      <div key={s.id} className="text-xs bg-[#EBF4FF] rounded-lg px-3 py-2 flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-[#2878D9]/10 flex items-center justify-center text-[7px] font-medium text-[#2878D9] shrink-0">{s.name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[#111827] truncate">{s.name}</p>
-                          <p className="text-[10px] text-[#6B7280]">{s.time}</p>
+                        <div className="space-y-1.5">
+                          {createdTasks.map(t => (
+                            <div key={t.id} className="text-xs bg-[#EBF4FF] rounded-lg px-3 py-2 border-l-2 border-[#2878D9]">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-[#111827]">{t.title}</span>
+                                <span className="text-[10px] text-[#6B7280]">{t.column}</span>
+                              </div>
+                              {t.description && <p className="text-[#6B7280] mt-0.5">{t.description}</p>}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    )}
+                    {dueTasks.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <AlertCircle size={13} className="text-[#EF4444]" />
+                          <span className="text-xs font-semibold text-[#111827]">Tasks Due</span>
+                          <span className="text-[10px] text-[#9CA3AF]">({dueTasks.length})</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {dueTasks.map(t => (
+                            <div key={t.id} className="text-xs bg-[#FEF2F2] rounded-lg px-3 py-2 border-l-2" style={{ borderLeftColor: PRIORITY_COLORS[t.priority] || '#6B7280' }}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-[#111827]">{t.title}</span>
+                                <span className="text-[10px] font-medium" style={{ color: PRIORITY_COLORS[t.priority] }}>{t.priority}</span>
+                              </div>
+                              {t.description && <p className="text-[#6B7280] mt-0.5">{t.description}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedDay.events.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <CalendarDays size={13} className="text-[#D97706]" />
+                          <span className="text-xs font-semibold text-[#111827]">Events</span>
+                          <span className="text-[10px] text-[#9CA3AF]">({selectedDay.events.length})</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {selectedDay.events.map(e => (
+                            <div key={e.id} className="text-xs bg-[#FFFBEB] rounded-lg px-3 py-2 border-l-2 cursor-pointer hover:bg-[#FFF7E6]" style={{ borderLeftColor: e.color }} onClick={() => openEditEvent(e)}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-[#111827]">{e.title}</span>
+                                {e.time && <span className="text-[10px] text-[#6B7280]"><Clock size={10} className="inline mr-0.5" />{e.time}</span>}
+                              </div>
+                              {e.description && <p className="text-[#6B7280] mt-0.5">{e.description}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedDay.sessions.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <MessageCircle size={13} className="text-[#2878D9]" />
+                          <span className="text-xs font-semibold text-[#111827]">Conversations</span>
+                          <span className="text-[10px] text-[#9CA3AF]">({selectedDay.sessions.length})</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {selectedDay.sessions.map(s => (
+                            <div key={s.id} className="text-xs bg-[#EBF4FF] rounded-lg px-3 py-2 flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-[#2878D9]/10 flex items-center justify-center text-[7px] font-medium text-[#2878D9] shrink-0">{s.name.split(' ').slice(-2).map(s => s[0]).join('')}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-[#111827] truncate">{s.name}</p>
+                                <p className="text-[10px] text-[#6B7280]">{s.time}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           </div>
         </div>
@@ -409,6 +502,17 @@ export default function CalendarPage() {
                   ))}
                 </div>
               </div>
+              {!editingEvent && (
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <button
+                    onClick={() => setAddToTodo(!addToTodo)}
+                    className={`w-4 h-4 rounded flex items-center justify-center border ${addToTodo ? 'bg-[#2878D9] border-[#2878D9]' : 'border-[#D1D5DB]'}`}
+                  >
+                    {addToTodo && <CheckSquare size={12} className="text-white" />}
+                  </button>
+                  <span className="text-xs text-[#6B7280]">Add to todo</span>
+                </label>
+              )}
             </div>
             <div className="flex items-center justify-between px-4 py-3 border-t border-[#E5E7EB]">
               {editingEvent && (
@@ -424,6 +528,16 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+
+      {/* TOASTS */}
+      <div className="fixed bottom-6 right-6 z-[2000] flex flex-col gap-2">
+        {toasts.map(t => (
+          <div key={t.id} className="bg-white border border-[#E5E7EB] rounded-lg shadow-lg px-4 py-2.5 text-xs font-medium text-[#111827] flex items-center gap-2" style={{ animation: 'slideUp 0.25s ease forwards' }}>
+            <ListTodo size={12} className="text-[#2878D9]" />
+            {t.msg}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
