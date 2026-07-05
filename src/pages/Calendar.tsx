@@ -189,49 +189,6 @@ export default function CalendarPage() {
 
   return (
     <div className="flex-1 flex bg-[#FAFAFA] overflow-hidden">
-      {/* Heatmap sidebar */}
-      <div className="w-[240px] bg-white border-r border-[#E5E7EB] p-4 flex flex-col gap-3 overflow-y-auto shrink-0">
-        <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider">{todayYear} Activity</p>
-        <div className="flex gap-0.5">
-          <div className="flex flex-col gap-0.5 mr-1 text-[8px] text-[#9CA3AF] leading-3 pt-3">
-            <span>Mon</span><span>Wed</span><span>Fri</span>
-          </div>
-          <div className="flex-1 overflow-x-auto">
-            <div className="flex gap-0.5" style={{ minWidth: heatmapWeeks * 12 }}>
-              {Array.from({ length: heatmapWeeks }).map((_, w) => (
-                <div key={w} className="flex flex-col gap-0.5">
-                  {Array.from({ length: 7 }).map((_, d) => {
-                    const idx = w * 7 + d - startDay
-                    if (idx < 0 || idx >= daysInYear) return <div key={d} className="w-2.5 h-2.5" />
-                    const hd = heatDates[idx]
-                    return (
-                      <div
-                        key={d}
-                        className="w-2.5 h-2.5 rounded-sm cursor-pointer"
-                        style={{ backgroundColor: HEAT_COLORS[hd.level] }}
-                        title={`${hd.date}: ${hd.level} activities`}
-                        onClick={() => setSelectedDate(hd.date)}
-                      />
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-[#9CA3AF]">
-          <span>Less</span>
-          {HEAT_COLORS.map((c, i) => <div key={i} className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c }} />)}
-          <span>More</span>
-        </div>
-        <div className="mt-2 text-[10px] text-[#6B7280] space-y-1">
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-[#EF4444]" /> Task deadline</div>
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-[#D97706]" /> Event</div>
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded bg-[#2878D9]" /> Chat session</div>
-        </div>
-      </div>
-
-      {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] bg-white shrink-0">
           <h1 className="text-lg font-semibold text-[#111827]">Calendar</h1>
@@ -244,7 +201,51 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        <div className="flex-1 flex overflow-hidden">
+        {/* Heatmap section */}
+        <div className="bg-white mx-4 mt-3 rounded-lg border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] font-semibold text-[#9CA3AF] tracking-wider">{todayYear} Activity</p>
+            <div className="flex items-center gap-3 text-[10px] text-[#6B7280]">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-[#EF4444]" /> Task</div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-[#D97706]" /> Event</div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-[#2878D9]" /> Session</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="flex flex-col gap-1 mr-2 text-[9px] text-[#9CA3AF] leading-4 pt-2">
+              <span>Mon</span><span>Wed</span><span>Fri</span>
+            </div>
+            <div className="flex-1 overflow-x-auto">
+              <div className="flex gap-1" style={{ minWidth: heatmapWeeks * 16 }}>
+                {Array.from({ length: heatmapWeeks }).map((_, w) => (
+                  <div key={w} className="flex flex-col gap-1">
+                    {Array.from({ length: 7 }).map((_, d) => {
+                      const idx = w * 7 + d - startDay
+                      if (idx < 0 || idx >= daysInYear) return <div key={d} className="w-4 h-4" />
+                      const hd = heatDates[idx]
+                      return (
+                        <div
+                          key={d}
+                          className="w-4 h-4 rounded-sm cursor-pointer transition-transform hover:scale-110"
+                          style={{ backgroundColor: HEAT_COLORS[hd.level] }}
+                          title={`${hd.date}: ${hd.level} activities`}
+                          onClick={() => setSelectedDate(hd.date)}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 ml-2 text-[10px] text-[#9CA3AF]">
+              <span>Less</span>
+              {HEAT_COLORS.map((c, i) => <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} />)}
+              <span>More</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden pt-2">
           {/* Calendar grid */}
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="bg-white mx-4 mt-4 rounded-lg border border-[#E5E7EB] shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col overflow-hidden">
