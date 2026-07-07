@@ -28,10 +28,10 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
         style={{
           fontSize: '2rem',
           letterSpacing: '0.06em',
-          transform: phase === 'exit' ? 'scale(3.5)' : 'scale(1)',
+          transform: phase === 'exit' ? 'scale(15)' : 'scale(1)',
           opacity: phase === 'exit' ? 0 : 1,
           transition: phase === 'exit'
-            ? 'transform 1s ease, opacity 0.9s ease'
+            ? 'transform 1s ease, opacity 1s ease'
             : 'none',
         }}
       >
