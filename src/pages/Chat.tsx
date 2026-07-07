@@ -166,6 +166,17 @@ export default function Chat() {
 
   function handleCloseHall() { setActiveHall(null) }
 
+  function handleSearchResult(sessionId: string) {
+    for (const [agentName, sessions] of Object.entries(sessionsByAgent)) {
+      if (sessions.some(s => s.id === sessionId)) {
+        setSelectedAgent(agentName)
+        setSelectedSession(sessionId)
+        setActiveHall(null)
+        return
+      }
+    }
+  }
+
   function handleAddAgentToHall(hallId: string, agentName: string) {
     setGreatHalls(prev => {
       const updated = prev.map(h =>
@@ -216,6 +227,7 @@ export default function Chat() {
         onSelectHall={handleSelectHall}
         onCreateGreatHall={handleCreateGreatHall}
         onDeleteHall={handleDeleteHall}
+        onSearchResult={handleSearchResult}
         totalSessions={totalSessions}
         totalAgents={totalAgents}
         awaitingCount={awaitingCount}

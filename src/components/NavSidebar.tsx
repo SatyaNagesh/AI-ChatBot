@@ -8,11 +8,12 @@ type SearchResult = {
   session_id: string; session_name: string; role: string; content: string
 }
 
-export default function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall, totalSessions, totalAgents, awaitingCount, pausedCount }: {
+export default function NavSidebar({ agents, selectedAgent, onSelectAgent, greatHalls, selectedHallId, onSelectHall, onCreateGreatHall, onDeleteHall, totalSessions, totalAgents, awaitingCount, pausedCount, onSearchResult }: {
   agents: Agent[]; selectedAgent: string; onSelectAgent: (n: string) => void;
   greatHalls: GreatHall[]; selectedHallId?: string; onSelectHall?: (h: GreatHall) => void;
   onCreateGreatHall: (name: string, agentNames: string[]) => void; onDeleteHall?: (id: string) => void
   totalSessions: number; totalAgents: number; awaitingCount: number; pausedCount: number
+  onSearchResult?: (sessionId: string) => void
 }) {
   const [showHallModal, setShowHallModal] = useState(false)
   const [hallName, setHallName] = useState('')
@@ -55,9 +56,8 @@ export default function NavSidebar({ agents, selectedAgent, onSelectAgent, great
     }, 300)
   }, [searchQuery])
 
-  function selectSearchResult(_sessionId: string) {
-    // Find which agent this session belongs to and switch to it
-    onSelectAgent('')
+  function selectSearchResult(sessionId: string) {
+    onSearchResult?.(sessionId)
     setShowResults(false)
     setSearchQuery('')
   }

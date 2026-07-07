@@ -353,7 +353,7 @@ export default function WeatherPage() {
                       </span>
                       <span className="text-lg">{hwmo.icon}</span>
                       <span className="text-sm font-semibold text-[#111827]">{Math.round(h.temp)}°</span>
-                      {h.rain > 0 && <span className="text-[10px] text-[#2878D9] font-mono">💧{h.rain}%</span>}
+                      {h.rain > 0 && <span className="text-[10px] text-[#2878D9] font-mono inline-flex items-center gap-0.5"><Droplets size={11} />{h.rain}%</span>}
                     </div>
                   )
                 })}
