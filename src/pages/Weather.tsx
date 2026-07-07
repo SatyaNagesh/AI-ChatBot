@@ -340,7 +340,7 @@ export default function WeatherPage() {
             <div>
               <p className="text-[10px] font-mono font-medium uppercase tracking-widest text-[#9CA3AF] mb-3">24-HOUR VIEW</p>
               <div className="flex gap-px bg-[#E5E7EB] border border-[#E5E7EB] rounded-lg overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
-                {hourlySlice.map((h, i) => {
+                {hourlySlice.map((h) => {
                   const hwmo = getWMO(h.code)
                   const currentHour = getCurrentHourInTZ(geo.timezone)
                   const slotHour = getSlotHour(h.time)
