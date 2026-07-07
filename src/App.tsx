@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PageName } from './types'
 import IconSidebar from './components/IconSidebar'
+import SplashScreen from './components/SplashScreen'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
 import CalendarPage from './pages/Calendar'
@@ -33,13 +34,19 @@ const PAGE_COMPONENTS: Record<PageName, React.ComponentType> = {
 
 export default function App() {
   const [activePage, setActivePage] = useState<PageName>('chat')
+  const [splashDone, setSplashDone] = useState(false)
 
   const PageComponent = PAGE_COMPONENTS[activePage]
 
   return (
-    <div className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif]">
-      <IconSidebar activePage={activePage} onPageChange={setActivePage} />
-      <PageComponent />
-    </div>
+    <>
+      <SplashScreen onFinish={() => setSplashDone(true)} />
+      {splashDone && (
+        <div className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif]">
+          <IconSidebar activePage={activePage} onPageChange={setActivePage} />
+          <PageComponent />
+        </div>
+      )}
+    </>
   )
 }
