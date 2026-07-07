@@ -26,7 +26,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
       <h1
         className="text-black font-bold select-none"
         style={{
-          fontSize: 'clamp(4rem, 15vw, 12rem)',
+          fontSize: '2rem',
           letterSpacing: '0.06em',
           transform: phase === 'exit' ? 'scale(3.5)' : 'scale(1)',
           opacity: phase === 'exit' ? 0 : 1,
