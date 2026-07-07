@@ -98,6 +98,14 @@ function fmtHour(h: number) {
   return (h - 12) + 'PM'
 }
 
+function getCurrentHourInTZ(tz: string): number {
+  return parseInt(new Date().toLocaleString('en-US', { timeZone: tz, hour: '2-digit', hour12: false }))
+}
+
+function getSlotHour(slotTime: string): number {
+  return parseInt(slotTime.split('T')[1].split(':')[0])
+}
+
 function shortDay(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
 }
@@ -269,7 +277,7 @@ export default function WeatherPage() {
                 {geo.country && <p className="text-xs text-[#9CA3AF] font-mono tracking-wider mt-1 uppercase">{geo.country}</p>}
               </div>
               <p className="text-xs text-[#6B7280] font-mono">
-                {new Date().toLocaleTimeString('en-US', { timeZone: geo.timezone, hour: '2-digit', minute: '2-digit', hour12: true, weekday: 'short' })}
+                {new Date().toLocaleString('en-US', { timeZone: geo.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
               </p>
             </div>
 
@@ -334,12 +342,14 @@ export default function WeatherPage() {
               <div className="flex gap-px bg-[#E5E7EB] border border-[#E5E7EB] rounded-lg overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
                 {hourlySlice.map((h, i) => {
                   const hwmo = getWMO(h.code)
-                  const isNow = i === 0
+                  const currentHour = getCurrentHourInTZ(geo.timezone)
+                  const slotHour = getSlotHour(h.time)
+                  const isNow = slotHour === currentHour
                   return (
                     <div key={h.time} className={`bg-white p-3 text-center flex-shrink-0 min-w-[60px] flex flex-col items-center gap-1.5 hover:bg-[#FAFAFA] transition-colors ${isNow ? 'relative' : ''}`}>
                       {isNow && <div className="absolute top-0 left-[30%] right-[30%] h-0.5 bg-[#2878D9] rounded-b" />}
                       <span className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${isNow ? 'text-[#2878D9]' : 'text-[#9CA3AF]'}`}>
-                        {isNow ? 'NOW' : fmtHour(new Date(h.time).getHours())}
+                        {isNow ? 'NOW' : fmtHour(slotHour)}
                       </span>
                       <span className="text-lg">{hwmo.icon}</span>
                       <span className="text-sm font-semibold text-[#111827]">{Math.round(h.temp)}°</span>
