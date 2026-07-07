@@ -346,7 +346,7 @@ export default function WeatherPage() {
                   const slotHour = getSlotHour(h.time)
                   const isNow = slotHour === currentHour
                   return (
-                    <div key={h.time} className={`bg-white p-3 text-center flex-shrink-0 min-w-[60px] flex flex-col items-center gap-1.5 hover:bg-[#FAFAFA] transition-colors ${isNow ? 'relative' : ''}`}>
+                    <div key={h.time} className={`bg-white py-5 px-3 text-center flex-shrink-0 min-w-[72px] flex flex-col items-center gap-1.5 hover:bg-[#FAFAFA] transition-colors ${isNow ? 'relative' : ''}`}>
                       {isNow && <div className="absolute top-0 left-[30%] right-[30%] h-0.5 bg-[#2878D9] rounded-b" />}
                       <span className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${isNow ? 'text-[#2878D9]' : 'text-[#9CA3AF]'}`}>
                         {isNow ? 'NOW' : fmtHour(slotHour)}
