@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { PageName } from './types'
 import IconSidebar from './components/IconSidebar'
 import SplashScreen from './components/SplashScreen'
@@ -35,18 +35,29 @@ const PAGE_COMPONENTS: Record<PageName, React.ComponentType> = {
 export default function App() {
   const [activePage, setActivePage] = useState<PageName>('dashboard')
   const [splashDone, setSplashDone] = useState(false)
+  const [appReady, setAppReady] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setAppReady(true), 1300)
+    return () => clearTimeout(t)
+  }, [])
 
   const PageComponent = PAGE_COMPONENTS[activePage]
 
   return (
     <>
-      <SplashScreen onFinish={() => setSplashDone(true)} />
-      {splashDone && (
-        <div className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif] animate-[appear_0.8s_cubic-bezier(0.16,1,0.3,1)_both]">
-          <IconSidebar activePage={activePage} onPageChange={setActivePage} />
-          <PageComponent />
-        </div>
-      )}
+      <div
+        className="h-full flex bg-[#FAFAFA] font-['Inter',sans-serif]"
+        style={{
+          opacity: appReady ? 1 : 0,
+          transform: appReady ? 'scale(1)' : 'scale(0.92)',
+          transition: appReady ? 'transform 0.3s ease, opacity 0.3s ease' : 'none',
+        }}
+      >
+        <IconSidebar activePage={activePage} onPageChange={setActivePage} />
+        <PageComponent />
+      </div>
+      {!splashDone && <SplashScreen onFinish={() => setSplashDone(true)} />}
     </>
   )
 }
