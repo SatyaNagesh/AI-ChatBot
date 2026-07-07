@@ -11,6 +11,7 @@ type Task = {
   priority: Priority
   dueDate: string
   createdAt: string
+  project?: string
 }
 
 const COLUMNS: { key: Column; color: string }[] = [
@@ -45,16 +46,16 @@ function emptyBoard(): Record<Column, Task[]> {
 function defaultTasks(): Record<Column, Task[]> {
   return {
     'To Do': [
-      { id: 'default1', title: 'Agent Memory Persistence', description: 'Agents remember context across conversations in the same session', priority: 'High', dueDate: '2026-07-11', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default2', title: 'Global Conversation Search', description: 'Cmd+K / Spotlight-style search across all conversations and agents', priority: 'High', dueDate: '2026-07-10', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default3', title: 'File Upload & Analysis', description: 'Drag & drop code, PDFs, images for agents to analyze directly in chat', priority: 'Medium', dueDate: '2026-07-12', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default4', title: 'Side-by-Side Agent Compare', description: 'Send one prompt to multiple agents and compare responses in split view', priority: 'Medium', dueDate: '2026-07-14', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default5', title: 'Prompt Library', description: 'Save, organize, and reuse prompt templates; assign to specific agents', priority: 'Medium', dueDate: '2026-07-15', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default6', title: 'Knowledge Base Page', description: 'Persistent docs/notes page that all agents can reference during conversations', priority: 'Medium', dueDate: '2026-07-18', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default7', title: 'Analytics Dashboard', description: 'Usage stats: messages per agent, response times, busiest days, trends', priority: 'Low', dueDate: '2026-07-20', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default8', title: 'Export & Share', description: 'Export conversations as markdown, PDF, or generate a shareable link', priority: 'Low', dueDate: '2026-07-22', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default9', title: 'Dark Mode', description: 'Light/dark theme toggle across the entire app', priority: 'Low', dueDate: '2026-07-25', createdAt: '2026-07-05T00:00:00.000Z' },
-      { id: 'default10', title: 'Voice Input', description: 'Microphone button with speech-to-text for hands-free chat', priority: 'Low', dueDate: '2026-07-28', createdAt: '2026-07-05T00:00:00.000Z' },
+      { id: 'default1', title: 'Agent Memory Persistence', description: 'Agents remember context across conversations in the same session', priority: 'High', dueDate: '2026-07-11', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default2', title: 'Global Conversation Search', description: 'Cmd+K / Spotlight-style search across all conversations and agents', priority: 'High', dueDate: '2026-07-10', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default3', title: 'File Upload & Analysis', description: 'Drag & drop code, PDFs, images for agents to analyze directly in chat', priority: 'Medium', dueDate: '2026-07-12', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default4', title: 'Side-by-Side Agent Compare', description: 'Send one prompt to multiple agents and compare responses in split view', priority: 'Medium', dueDate: '2026-07-14', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default5', title: 'Prompt Library', description: 'Save, organize, and reuse prompt templates; assign to specific agents', priority: 'Medium', dueDate: '2026-07-15', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default6', title: 'Knowledge Base Page', description: 'Persistent docs/notes page that all agents can reference during conversations', priority: 'Medium', dueDate: '2026-07-18', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default7', title: 'Analytics Dashboard', description: 'Usage stats: messages per agent, response times, busiest days, trends', priority: 'Low', dueDate: '2026-07-20', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default8', title: 'Export & Share', description: 'Export conversations as markdown, PDF, or generate a shareable link', priority: 'Low', dueDate: '2026-07-22', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default9', title: 'Dark Mode', description: 'Light/dark theme toggle across the entire app', priority: 'Low', dueDate: '2026-07-25', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
+      { id: 'default10', title: 'Voice Input', description: 'Microphone button with speech-to-text for hands-free chat', priority: 'Low', dueDate: '2026-07-28', createdAt: '2026-07-05T00:00:00.000Z', project: 'AI-ChatBot' },
     ],
     'In Progress': [],
     'In Review': [],
@@ -95,7 +96,7 @@ async function apiPost(task: Task, column: Column): Promise<boolean> {
   try {
     const res = await fetch(API_BASE, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: task.title, description: task.description, priority: task.priority, dueDate: task.dueDate, column }),
+      body: JSON.stringify({ title: task.title, description: task.description, priority: task.priority, dueDate: task.dueDate, column, project: task.project }),
     })
     return res.ok
   } catch { return false }
@@ -141,6 +142,7 @@ export default function TasksPage() {
   const [formDesc, setFormDesc] = useState('')
   const [formPriority, setFormPriority] = useState<Priority>('Medium')
   const [formDue, setFormDue] = useState('')
+  const [formProject, setFormProject] = useState('')
   const [quickAddCol, setQuickAddCol] = useState<Column | null>(null)
   const [quickAddTitle, setQuickAddTitle] = useState('')
   const [toasts, setToasts] = useState<{ id: string; msg: string }[]>([])
@@ -182,6 +184,7 @@ export default function TasksPage() {
     setFormDesc('')
     setFormPriority('Medium')
     setFormDue('')
+    setFormProject('')
     setShowModal(true)
   }
 
@@ -192,6 +195,7 @@ export default function TasksPage() {
     setFormDesc(task.description)
     setFormPriority(task.priority)
     setFormDue(task.dueDate)
+    setFormProject(task.project || '')
     setShowModal(true)
   }
 
@@ -204,13 +208,13 @@ export default function TasksPage() {
         for (const col of COLUMNS.map(c => c.key)) {
           next[col] = next[col].map(t =>
             t.id === editingTask.id
-              ? { ...t, title: formTitle.trim(), description: formDesc.trim(), priority: formPriority, dueDate: formDue }
+              ? { ...t, title: formTitle.trim(), description: formDesc.trim(), priority: formPriority, dueDate: formDue, project: formProject.trim() || undefined }
               : t
           )
         }
         return next
       })
-      apiPut(editingTask.id, { title: formTitle.trim(), description: formDesc.trim(), priority: formPriority, dueDate: formDue })
+      apiPut(editingTask.id, { title: formTitle.trim(), description: formDesc.trim(), priority: formPriority, dueDate: formDue, project: formProject.trim() || undefined })
         .then(ok => setOnline(ok))
       addToast('Task updated')
     } else {
@@ -221,6 +225,7 @@ export default function TasksPage() {
         priority: formPriority,
         dueDate: formDue,
         createdAt: now,
+        project: formProject.trim() || undefined,
       }
       setTasks(prev => ({ ...prev, [editColumn]: [task, ...prev[editColumn]] }))
       apiPost(task, editColumn).then(ok => setOnline(ok))
@@ -502,6 +507,15 @@ export default function TasksPage() {
                 onChange={e => setFormDesc(e.target.value)}
                 rows={3}
               />
+              <div>
+                <label className="block text-[10px] font-medium text-[#6B7280] mb-1 uppercase tracking-wider">Project</label>
+                <input
+                  value={formProject}
+                  onChange={e => setFormProject(e.target.value)}
+                  placeholder="e.g. AI-ChatBot, API Rate Limiter..."
+                  className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 outline-none focus:border-[#2878D9] text-[#111827] transition-colors"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-medium text-[#6B7280] mb-1 uppercase tracking-wider">Priority</label>
