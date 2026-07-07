@@ -38,8 +38,7 @@ export default function App() {
   const [appReady, setAppReady] = useState(false)
 
   useEffect(() => {
-    const t = setTimeout(() => setAppReady(true), 1300)
-    return () => clearTimeout(t)
+    setAppReady(true)
   }, [])
 
   const PageComponent = PAGE_COMPONENTS[activePage]
