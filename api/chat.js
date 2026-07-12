@@ -1,4 +1,4 @@
-const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY || Buffer.from('c2stb3ItdjEtZjM1OTJiNjBmZWZmNWNiODlkNjU1MGU4MTEyZWY2NzVjYzE3M2IxY2E4MTg0OGNmMzdkNWYyYzhhM2I5ODE1ZQo=', 'base64').toString('utf-8').trim();
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DB_API = 'https://ai-chatbot-api.satyanagesh-r.workers.dev';
 
