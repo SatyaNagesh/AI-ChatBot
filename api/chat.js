@@ -1,15 +1,19 @@
-const TOKENLB_KEY = 'sk-mOpKxPG24lnBWjrJ2IEw5vfisXSuEqD2EStVYLhznjRTWME4';
-const BLUESMINDS_KEY = 'sk-KmTYfHsUASkvQSHDx1WIZfQZyWfvALCijVk2Q65puUGqVO4P';
-const TOKENLB_URL = 'https://tokenlb.net/v1/chat/completions';
-const BLUESMINDS_URL = 'https://api.bluesminds.com/v1/chat/completions';
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DB_API = 'https://ai-chatbot-api.satyanagesh-r.workers.dev';
 
-const MODEL_ROUTES = {
-  'claude-opus-4-8': BLUESMINDS_URL, 'claude-opus-4-7': BLUESMINDS_URL,
-  'claude-opus-4-6': BLUESMINDS_URL, 'claude-sonnet-4-6': BLUESMINDS_URL,
-  'claude-sonnet-4-5-20250929': BLUESMINDS_URL, 'claude-haiku-4-5-20251001': BLUESMINDS_URL,
-  'gpt-5.5': BLUESMINDS_URL, 'gpt-5.4': BLUESMINDS_URL, 'gpt-5.4-mini': BLUESMINDS_URL,
-  'gemini-3.1-pro-preview': BLUESMINDS_URL, 'blackbox': BLUESMINDS_URL,
+const MODEL_MAP = {
+  'claude-opus-4-8': 'anthropic/claude-opus-4-8',
+  'claude-opus-4-7': 'anthropic/claude-opus-4-7',
+  'claude-opus-4-6': 'anthropic/claude-opus-4-6',
+  'claude-sonnet-4-6': 'anthropic/claude-sonnet-4-6',
+  'claude-sonnet-4-5-20250929': 'anthropic/claude-sonnet-4-5-20250929',
+  'claude-haiku-4-5-20251001': 'anthropic/claude-haiku-4-5-20251001',
+  'gpt-5.5': 'openai/gpt-5.5',
+  'gpt-5.4': 'openai/gpt-5.4',
+  'gpt-5.4-mini': 'openai/gpt-5.4-mini',
+  'gemini-3.1-pro-preview': 'google/gemini-3.1-pro-preview',
+  'blackbox': 'blackbox',
 };
 
 export default async function handler(req, res) {
@@ -21,7 +25,6 @@ export default async function handler(req, res) {
     const { messages, model } = req.body;
     if (!model) { res.status(400).json({ error: 'model required' }); return; }
 
-    // Fetch shared memories and inject as context
     let memoryContext = '';
     try {
       const memRes = await fetch(`${DB_API}/memory`);
@@ -34,18 +37,17 @@ export default async function handler(req, res) {
       }
     } catch {}
 
-    const apiUrl = MODEL_ROUTES[model] || TOKENLB_URL;
-    const apiKey = apiUrl === BLUESMINDS_URL ? BLUESMINDS_KEY : TOKENLB_KEY;
+    const openrouterModel = MODEL_MAP[model] || model;
 
     const fullMessages = [
       { role: 'system', content: `You are ${model}. Reply helpfully and concisely.${memoryContext}` },
       ...(messages || []),
     ];
 
-    const apiRes = await fetch(apiUrl, {
+    const apiRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages: fullMessages, stream: true }),
+      headers: { 'Authorization': `Bearer ${OPENROUTER_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: openrouterModel, messages: fullMessages, stream: true, max_tokens: 2000 }),
     });
 
     if (!apiRes.ok) {
