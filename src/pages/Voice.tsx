@@ -26,6 +26,7 @@ export default function VoicePage() {
   const activeSession = sessions.find(s => s.id === activeId) || null
   const onlineAgents = AGENTS_DATA.filter(a => a.online)
   const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const [voice, setVoice] = useState('en-US-GuyNeural')
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   async function speak(text: string, msgId: string) {
@@ -39,7 +40,7 @@ export default function VoicePage() {
       const res = await fetch(ttsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice }),
       })
       if (!res.ok) throw new Error('TTS failed')
       const blob = await res.blob()
@@ -234,9 +235,22 @@ export default function VoicePage() {
               <Download size={13} /> Export
             </button>
             {!compareMode ? (
-              <select value={model} onChange={e => setModel(e.target.value)} className="text-xs border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 bg-white text-[#374151] focus:outline-none focus:border-[#2878D9]">
-                {onlineAgents.map(a => <option key={a.model} value={a.model}>{a.name}</option>)}
-              </select>
+              <>
+                <select value={model} onChange={e => setModel(e.target.value)} className="text-xs border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 bg-white text-[#374151] focus:outline-none focus:border-[#2878D9]">
+                  {onlineAgents.map(a => <option key={a.model} value={a.model}>{a.name}</option>)}
+                </select>
+                <select value={voice} onChange={e => setVoice(e.target.value)} className="text-xs border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 bg-white text-[#374151] focus:outline-none focus:border-[#2878D9]">
+                  <option value="en-US-GuyNeural">Guy (US)</option>
+                  <option value="en-US-JennyNeural">Jenny (US)</option>
+                  <option value="en-US-AriaNeural">Aria (US)</option>
+                  <option value="en-US-DavisNeural">Davis (US)</option>
+                  <option value="en-US-TonyNeural">Tony (US)</option>
+                  <option value="en-GB-RyanNeural">Ryan (UK)</option>
+                  <option value="en-GB-SoniaNeural">Sonia (UK)</option>
+                  <option value="en-IN-PrabhatNeural">Prabhat (IN)</option>
+                  <option value="en-IN-NeerjaNeural">Neerja (IN)</option>
+                </select>
+              </>
             ) : null}
           </div>
         </div>
