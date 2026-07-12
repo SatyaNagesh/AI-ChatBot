@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Trash2, Plus, MessageSquare, Activity, Clock, Cpu, Loader2, GitCompare, FileText, Download, Upload, DollarSign } from 'lucide-react'
+import { Send, Trash2, Plus, MessageSquare, Activity, Clock, Cpu, Loader2, GitCompare, FileText, Download, Upload, DollarSign, Volume2, Pause } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { AGENTS_DATA } from '../data/agents'
 
@@ -25,6 +25,34 @@ export default function VoicePage() {
 
   const activeSession = sessions.find(s => s.id === activeId) || null
   const onlineAgents = AGENTS_DATA.filter(a => a.online)
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  async function speak(text: string, msgId: string) {
+    if (speakingId === msgId) {
+      audioRef.current?.pause()
+      setSpeakingId(null)
+      return
+    }
+    try {
+      const ttsUrl = import.meta.env.DEV ? 'http://localhost:3457/tts' : '/api/tts'
+      const res = await fetch(ttsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) throw new Error('TTS failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      if (audioRef.current) audioRef.current.pause()
+      audioRef.current = new Audio(url)
+      audioRef.current.onended = () => { setSpeakingId(null); URL.revokeObjectURL(url) }
+      audioRef.current.play()
+      setSpeakingId(msgId)
+    } catch {
+      setSpeakingId(null)
+    }
+  }
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [activeSession?.messages, compareResults])
 
@@ -241,8 +269,17 @@ export default function VoicePage() {
                 <div className="max-w-[70%] bg-[#2878D9] text-white rounded-xl px-4 py-2 text-sm leading-relaxed">{m.content}</div>
               </div>
             ) : (
-              <div key={m.id} className="text-sm text-[#111827] leading-relaxed bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5">
+              <div key={m.id} className="group text-sm text-[#111827] leading-relaxed bg-white border border-[#E5E7EB] rounded-xl px-4 py-2.5">
                 {m.content || <span className="text-[#9CA3AF] italic">streaming...</span>}
+                {m.content && (
+                  <button
+                    onClick={() => speak(m.content, m.id)}
+                    className="ml-2 mt-1 inline-flex items-center gap-1 text-[10px] text-[#9CA3AF] hover:text-[#2878D9] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    {speakingId === m.id ? <Pause size={12} /> : <Volume2 size={12} />}
+                    {speakingId === m.id ? 'Stop' : 'Speak'}
+                  </button>
+                )}
               </div>
             )
           ))}
