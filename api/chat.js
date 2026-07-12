@@ -5,10 +5,10 @@ const BLUESMINDS_URL = 'https://api.bluesminds.com/v1/chat/completions';
 const DB_API = 'https://ai-chatbot-api.satyanagesh-r.workers.dev';
 
 const MODEL_ROUTES = {
-  'claude-opus-4-8': TOKENLB_URL, 'claude-opus-4-7': TOKENLB_URL,
-  'claude-opus-4-6': TOKENLB_URL, 'claude-sonnet-4-6': TOKENLB_URL,
-  'claude-sonnet-4-5-20250929': TOKENLB_URL, 'claude-haiku-4-5-20251001': TOKENLB_URL,
-  'gpt-5.5': TOKENLB_URL, 'gpt-5.4': TOKENLB_URL, 'gpt-5.4-mini': TOKENLB_URL,
+  'claude-opus-4-8': BLUESMINDS_URL, 'claude-opus-4-7': BLUESMINDS_URL,
+  'claude-opus-4-6': BLUESMINDS_URL, 'claude-sonnet-4-6': BLUESMINDS_URL,
+  'claude-sonnet-4-5-20250929': BLUESMINDS_URL, 'claude-haiku-4-5-20251001': BLUESMINDS_URL,
+  'gpt-5.5': BLUESMINDS_URL, 'gpt-5.4': BLUESMINDS_URL, 'gpt-5.4-mini': BLUESMINDS_URL,
   'gemini-3.1-pro-preview': BLUESMINDS_URL, 'blackbox': BLUESMINDS_URL,
 };
 
