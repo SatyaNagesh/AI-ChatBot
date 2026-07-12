@@ -1,17 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Trash2, Plus, MessageSquare, Activity, Clock, Cpu, Loader2, GitCompare, FileText, Download, Upload, DollarSign, Volume2, Pause } from 'lucide-react'
+import { Send, Trash2, Plus, MessageSquare, Activity, Clock, Cpu, Loader2, GitCompare, FileText, Download, Upload, DollarSign, Volume2, Pause, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { AGENTS_DATA } from '../data/agents'
 
 type OjSession = { id: string; created_at: string; title: string; messages: OjMessage[] }
 type OjMessage = { id: string; role: 'user' | 'assistant'; content: string; compare?: string[] }
-type OjTrace = { latency_ms: number; tokens_in: number; tokens_out: number; model: string }
+type OjTrace = { id: string; session_id: string; model: string; tokens_in: number; tokens_out: number; latency_ms: number; success: boolean; created_at: string }
 type OjTemplate = { id: string; name: string; prompt: string; variables: string[]; model: string }
 type RightTab = 'traces' | 'memories' | 'templates' | 'costs'
 type CompareResult = { model: string; content: string; latency: number }
+type Notification = { type: 'error' | 'info'; message: string }
+
+function genId() { return crypto.randomUUID() }
+
+function lsGet<T>(k: string, def: T): T {
+  try { const v = localStorage.getItem('oj_' + k); return v ? JSON.parse(v) : def } catch { return def }
+}
+function lsSet(k: string, v: unknown) { try { localStorage.setItem('oj_' + k, JSON.stringify(v)) } catch {} }
 
 export default function VoicePage() {
-  const [sessions, setSessions] = useState<OjSession[]>([])
+  const [sessions, setSessions] = useState<OjSession[]>(() => lsGet('sessions', []))
   const [activeId, setActiveId] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -20,6 +28,9 @@ export default function VoicePage() {
   const [compareMode, setCompareMode] = useState(false)
   const [compareModels, setCompareModels] = useState<string[]>([AGENTS_DATA[0].model, AGENTS_DATA[1].model])
   const [compareResults, setCompareResults] = useState<CompareResult[]>([])
+  const [notif, setNotif] = useState<Notification | null>(null)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const [sbAvailable, setSbAvailable] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -28,6 +39,13 @@ export default function VoicePage() {
   const [speakingId, setSpeakingId] = useState<string | null>(null)
   const [voice, setVoice] = useState('en-US-GuyNeural')
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  function notify(type: 'error' | 'info', message: string) {
+    setNotif({ type, message })
+    setTimeout(() => setNotif(null), 5000)
+  }
+
+  useEffect(() => { lsSet('sessions', sessions) }, [sessions])
 
   async function speak(text: string, msgId: string) {
     if (speakingId === msgId) {
@@ -51,6 +69,7 @@ export default function VoicePage() {
       audioRef.current.play()
       setSpeakingId(msgId)
     } catch {
+      notify('error', 'TTS server not running. Start it with: python server/tts_server.py')
       setSpeakingId(null)
     }
   }
@@ -58,36 +77,59 @@ export default function VoicePage() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [activeSession?.messages, compareResults])
 
   const loadSessions = useCallback(async () => {
-    const { data } = await supabase.from('openjarvis_sessions').select('*').order('created_at', { ascending: false })
-    if (data) {
-      const withMessages = await Promise.all(data.map(async s => {
-        const { data: msgs } = await supabase.from('openjarvis_messages').select('*').eq('session_id', s.id).order('created_at', { ascending: true })
-        return { ...s, messages: (msgs || []).map(m => ({ ...m, compare: undefined })) }
-      }))
-      setSessions(withMessages)
+    try {
+      const { data, error } = await supabase.from('openjarvis_sessions').select('*').order('created_at', { ascending: false })
+      if (error) throw error
+      if (data) {
+        const withMessages = await Promise.all(data.map(async s => {
+          const { data: msgs } = await supabase.from('openjarvis_messages').select('*').eq('session_id', s.id).order('created_at', { ascending: true })
+          return { ...s, messages: (msgs || []).map(m => ({ ...m, compare: undefined })) }
+        }))
+        setSessions(withMessages)
+        setSbAvailable(true)
+      }
+    } catch {
+      const local = lsGet<OjSession[]>('sessions', [])
+      setSessions(local)
+      setSbAvailable(false)
+      if (local.length === 0) notify('info', 'Using local storage (offline mode)')
     }
+    setInitialLoadDone(true)
   }, [])
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
   async function createSession() {
-    const { data } = await supabase.from('openjarvis_sessions').insert({ title: 'New conversation', model }).select().single()
-    if (data) { setSessions(prev => [{ ...data, messages: [] }, ...prev]); setActiveId(data.id) }
+    const newSession = { id: genId(), created_at: new Date().toISOString(), title: 'New conversation', messages: [] }
+    try {
+      if (sbAvailable) {
+        const { data, error } = await supabase.from('openjarvis_sessions').insert({ id: newSession.id, title: newSession.title, model }).select().single()
+        if (error || !data) throw error || new Error('no data')
+      }
+    } catch {
+      setSbAvailable(false)
+    }
+    setSessions(prev => [newSession as OjSession, ...prev])
+    setActiveId(newSession.id)
   }
 
   async function deleteSession(id: string) {
-    await Promise.all([
-      supabase.from('openjarvis_messages').delete().eq('session_id', id),
-      supabase.from('openjarvis_traces').delete().eq('session_id', id),
-      supabase.from('openjarvis_memories').delete().eq('session_id', id),
-      supabase.from('openjarvis_sessions').delete().eq('id', id),
-    ])
+    try {
+      if (sbAvailable) {
+        await Promise.all([
+          supabase.from('openjarvis_messages').delete().eq('session_id', id),
+          supabase.from('openjarvis_traces').delete().eq('session_id', id),
+          supabase.from('openjarvis_memories').delete().eq('session_id', id),
+          supabase.from('openjarvis_sessions').delete().eq('id', id),
+        ])
+      }
+    } catch {}
     setSessions(prev => prev.filter(s => s.id !== id))
     if (activeId === id) setActiveId(null)
   }
 
-  function renameSession(id: string, title: string) {
-    supabase.from('openjarvis_sessions').update({ title }).eq('id', id)
+  async function renameSession(id: string, title: string) {
+    if (sbAvailable) { try { await supabase.from('openjarvis_sessions').update({ title }).eq('id', id) } catch {} }
     setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))
   }
 
@@ -96,7 +138,6 @@ export default function VoicePage() {
     if (!input.trim() || !sid || streaming) return
     const userText = input.trim()
     setInput('')
-
     if (!compareMode) {
       await singleSend(sid, userText)
     } else {
@@ -108,27 +149,34 @@ export default function VoicePage() {
     const startTime = performance.now()
     setStreaming(true)
 
-    const userMsg: OjMessage = { id: crypto.randomUUID(), role: 'user', content: userText }
-    await supabase.from('openjarvis_messages').insert({ id: userMsg.id, session_id: sid, role: 'user', content: userText, model })
-    setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: [...s.messages, userMsg] } : s))
+    const userMsg: OjMessage = { id: genId(), role: 'user', content: userText }
+    addMessage(sid, userMsg)
+    try {
+      if (sbAvailable) { await supabase.from('openjarvis_messages').insert({ id: userMsg.id, session_id: sid, role: 'user', content: userText, model }) }
+    } catch { setSbAvailable(false) }
 
-    if (sessions.find(s => s.id === sid)?.messages.length === 1) {
+    if ((sessions.find(s => s.id === sid)?.messages.length || 0) === 0) {
       renameSession(sid, userText.slice(0, 60) + (userText.length > 60 ? '...' : ''))
     }
 
-    const assistantId = crypto.randomUUID()
-    setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: [...s.messages, { id: assistantId, role: 'assistant', content: '' }] } : s))
+    const assistantId = genId()
+    addMessage(sid, { id: assistantId, role: 'assistant', content: '' })
 
     try {
       const resp = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, messages: [{ role: 'user', content: userText }] }) })
+      if (!resp.ok) throw new Error(`API returned ${resp.status}`)
       const text = await resp.text()
       const latencyMs = Math.round(performance.now() - startTime)
 
-      setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: s.messages.map(m => m.id === assistantId ? { ...m, content: text } : m) } : s))
-      await supabase.from('openjarvis_messages').insert({ id: assistantId, session_id: sid, role: 'assistant', content: text, model })
-      await supabase.from('openjarvis_traces').insert({ session_id: sid, message_id: assistantId, model, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(text.length / 4), latency_ms: latencyMs, success: true })
+      updateMessage(sid, assistantId, text)
+      try {
+        if (sbAvailable) {
+          await supabase.from('openjarvis_messages').insert({ id: assistantId, session_id: sid, role: 'assistant', content: text, model })
+          await supabase.from('openjarvis_traces').insert({ session_id: sid, message_id: assistantId, model, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(text.length / 4), latency_ms: latencyMs, success: true })
+        }
+      } catch {}
     } catch {
-      setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: s.messages.map(m => m.id === assistantId ? { ...m, content: 'Request failed.' } : m) } : s))
+      updateMessage(sid, assistantId, 'Request failed. Is the API server running?')
     } finally { setStreaming(false) }
   }
 
@@ -136,11 +184,10 @@ export default function VoicePage() {
     setStreaming(true)
     setCompareResults([])
 
-    const userMsg: OjMessage = { id: crypto.randomUUID(), role: 'user', content: userText }
-    await supabase.from('openjarvis_messages').insert({ id: userMsg.id, session_id: sid, role: 'user', content: userText, model: compareModels.join(',') })
-    setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: [...s.messages, userMsg] } : s))
+    const userMsg: OjMessage = { id: genId(), role: 'user', content: userText }
+    addMessage(sid, userMsg)
 
-    if (sessions.find(s => s.id === sid)?.messages.length === 1) {
+    if ((sessions.find(s => s.id === sid)?.messages.length || 0) === 0) {
       renameSession(sid, userText.slice(0, 60) + (userText.length > 60 ? '...' : ''))
     }
 
@@ -148,6 +195,7 @@ export default function VoicePage() {
       const t0 = performance.now()
       try {
         const resp = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m, messages: [{ role: 'user', content: userText }] }) })
+        if (!resp.ok) throw new Error('failed')
         const text = await resp.text()
         return { model: m, content: text, latency: Math.round(performance.now() - t0) }
       } catch { return { model: m, content: 'Failed', latency: 0 } }
@@ -155,11 +203,24 @@ export default function VoicePage() {
 
     setCompareResults(results)
     for (const r of results) {
-      const aid = crypto.randomUUID()
-      await supabase.from('openjarvis_messages').insert({ id: aid, session_id: sid, role: 'assistant', content: `[${r.model}]\n${r.content}`, model: r.model })
-      await supabase.from('openjarvis_traces').insert({ session_id: sid, message_id: aid, model: r.model, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(r.content.length / 4), latency_ms: r.latency, success: r.content !== 'Failed' })
+      const aid = genId()
+      addMessage(sid, { id: aid, role: 'assistant', content: `[${r.model}]\n${r.content}` })
+      try {
+        if (sbAvailable) {
+          await supabase.from('openjarvis_messages').insert({ id: aid, session_id: sid, role: 'assistant', content: `[${r.model}]\n${r.content}`, model: r.model })
+          await supabase.from('openjarvis_traces').insert({ session_id: sid, message_id: aid, model: r.model, tokens_in: Math.round(userText.length / 4), tokens_out: Math.round(r.content.length / 4), latency_ms: r.latency, success: r.content !== 'Failed' })
+        }
+      } catch {}
     }
     setStreaming(false)
+  }
+
+  function addMessage(sid: string, msg: OjMessage) {
+    setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: [...s.messages, msg] } : s))
+  }
+
+  function updateMessage(sid: string, mid: string, content: string) {
+    setSessions(prev => prev.map(s => s.id === sid ? { ...s, messages: s.messages.map(m => m.id === mid ? { ...m, content } : m) } : s))
   }
 
   function toggleCompareModel(m: string) {
@@ -202,13 +263,25 @@ export default function VoicePage() {
 
   return (
     <div className="flex-1 flex bg-[#FAFAFA] overflow-hidden">
+      {/* Notification */}
+      {notif && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium animate-in ${notif.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+          <AlertCircle size={14} />
+          {notif.message}
+        </div>
+      )}
+
       {/* Sessions sidebar */}
       <div className="w-52 flex-shrink-0 bg-white border-r border-[#E5E7EB] flex flex-col">
         <div className="p-3 border-b border-[#E5E7EB]">
           <button onClick={createSession} className="w-full flex items-center justify-center gap-1.5 text-sm bg-[#2878D9] text-white rounded-lg py-1.5 hover:bg-[#1D5FA8] cursor-pointer"><Plus size={14} /> New Session</button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {sessions.map(s => (
+          {!initialLoadDone ? (
+            <div className="flex items-center justify-center py-8"><Loader2 size={14} className="animate-spin text-[#9CA3AF]" /></div>
+          ) : sessions.length === 0 ? (
+            <p className="text-xs text-[#9CA3AF] text-center py-8">No sessions yet.<br />Click New Session above.</p>
+          ) : sessions.map(s => (
             <button key={s.id} onClick={() => setActiveId(s.id)} className={`w-full text-left p-2 rounded-lg text-xs flex items-center gap-2 cursor-pointer ${activeId === s.id ? 'bg-[#EFF6FF] text-[#2878D9]' : 'text-[#374151] hover:bg-[#F3F4F6]'}`}>
               <MessageSquare size={13} className="flex-shrink-0" />
               <span className="truncate flex-1">{s.title}</span>
@@ -225,9 +298,15 @@ export default function VoicePage() {
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 rounded-lg bg-[#0A0F1E] flex items-center justify-center"><span className="text-xs font-bold text-white">J</span></div>
             <span className="text-sm font-semibold text-[#111827]">OpenJarvis</span>
+            {!sbAvailable && <span className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200">Offline</span>}
             {compareMode && <span className="text-[10px] bg-[#EFF6FF] text-[#2878D9] px-2 py-0.5 rounded-full flex items-center gap-1"><GitCompare size={10} /> Compare</span>}
           </div>
           <div className="flex items-center gap-1.5">
+            {!sbAvailable && (
+              <button onClick={() => { setSbAvailable(true); loadSessions() }} className="text-xs px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 cursor-pointer flex items-center gap-1" title="Retry connecting to Supabase">
+                <Loader2 size={12} /> Retry
+              </button>
+            )}
             <button onClick={() => setCompareMode(!compareMode)} className={`text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer flex items-center gap-1 ${compareMode ? 'bg-[#EFF6FF] border-[#2878D9] text-[#2878D9]' : 'border-[#E5E7EB] text-[#6B7280] hover:bg-[#F3F4F6]'}`}>
               <GitCompare size={13} /> Compare
             </button>
@@ -273,7 +352,7 @@ export default function VoicePage() {
             <div className="h-full flex flex-col items-center justify-center text-center">
               <div className="w-14 h-14 rounded-2xl bg-[#0A0F1E] flex items-center justify-center mb-3"><Cpu size={24} className="text-white" /></div>
               <h3 className="text-base font-semibold text-[#111827] mb-1">Personal AI, On Your Cloud</h3>
-              <p className="text-xs text-[#6B7280] max-w-sm">Start a session. Compare models. Store memories. Track costs. All persisted in Supabase.</p>
+              <p className="text-xs text-[#6B7280] max-w-sm">Create a session above to start chatting.</p>
             </div>
           )}
 
@@ -343,14 +422,10 @@ export default function VoicePage() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Traces tab */}
-          {rightTab === 'traces' && <TracesTab sessionId={activeId} />}
-          {/* Memories tab */}
-          {rightTab === 'memories' && <MemoriesTab sessionId={activeId} />}
-          {/* Templates tab */}
-          {rightTab === 'templates' && <TemplatesTab onApply={applyTemplate} />}
-          {/* Costs tab */}
-          {rightTab === 'costs' && <CostsTab />}
+          {rightTab === 'traces' && <TracesTab sessionId={activeId} sbAvailable={sbAvailable} />}
+          {rightTab === 'memories' && <MemoriesTab sessionId={activeId} sbAvailable={sbAvailable} />}
+          {rightTab === 'templates' && <TemplatesTab onApply={applyTemplate} sbAvailable={sbAvailable} />}
+          {rightTab === 'costs' && <CostsTab sbAvailable={sbAvailable} />}
         </div>
       </div>
     </div>
@@ -358,11 +433,12 @@ export default function VoicePage() {
 }
 
 /* ---- Traces Tab ---- */
-function TracesTab({ sessionId }: { sessionId: string | null }) {
+function TracesTab({ sessionId, sbAvailable }: { sessionId: string | null; sbAvailable: boolean }) {
   const [traces, setTraces] = useState<OjTrace[]>([])
 
   useEffect(() => {
     if (!sessionId) return
+    if (!sbAvailable) { setTraces([]); return }
     const load = async () => {
       const { data } = await supabase.from('openjarvis_traces').select('*').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(15)
       if (data) setTraces(data)
@@ -370,9 +446,10 @@ function TracesTab({ sessionId }: { sessionId: string | null }) {
     load()
     const sub = supabase.channel('traces').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'openjarvis_traces', filter: `session_id=eq.${sessionId}` }, () => load()).subscribe()
     return () => { sub.unsubscribe() }
-  }, [sessionId])
+  }, [sessionId, sbAvailable])
 
   if (!sessionId) return <div className="p-4 text-xs text-[#9CA3AF]">Select a session</div>
+  if (!sbAvailable) return <div className="p-4 text-xs text-[#9CA3AF]">Not available in offline mode</div>
 
   return (
     <div className="p-4 space-y-2">
@@ -388,7 +465,7 @@ function TracesTab({ sessionId }: { sessionId: string | null }) {
 }
 
 /* ---- Memories Tab ---- */
-function MemoriesTab({ sessionId }: { sessionId: string | null }) {
+function MemoriesTab({ sessionId, sbAvailable }: { sessionId: string | null; sbAvailable: boolean }) {
   const [localMem, setLocalMem] = useState<{ id: string; key: string; value: string }[]>([])
   const [globalMem, setGlobalMem] = useState<{ id: string; key: string; value: string }[]>([])
   const [key, setKey] = useState('')
@@ -396,21 +473,22 @@ function MemoriesTab({ sessionId }: { sessionId: string | null }) {
   const [scope, setScope] = useState<'session' | 'global'>('session')
 
   const loadLocal = useCallback(async () => {
-    if (!sessionId) return
+    if (!sessionId || !sbAvailable) return
     const { data } = await supabase.from('openjarvis_memories').select('*').eq('session_id', sessionId).order('created_at', { ascending: false })
     if (data) setLocalMem(data)
-  }, [sessionId])
+  }, [sessionId, sbAvailable])
 
   const loadGlobal = useCallback(async () => {
+    if (!sbAvailable) return
     const { data } = await supabase.from('openjarvis_global_memories').select('*').order('created_at', { ascending: false })
     if (data) setGlobalMem(data)
-  }, [])
+  }, [sbAvailable])
 
   useEffect(() => { loadLocal() }, [loadLocal])
   useEffect(() => { loadGlobal() }, [loadGlobal])
 
   async function addMemory() {
-    if (!key.trim() || !val.trim()) return
+    if (!key.trim() || !val.trim() || !sbAvailable) return
     if (scope === 'session') {
       if (!sessionId) return
       const { data } = await supabase.from('openjarvis_memories').insert({ session_id: sessionId, key: key.trim(), value: val.trim() }).select().single()
@@ -422,9 +500,12 @@ function MemoriesTab({ sessionId }: { sessionId: string | null }) {
   }
 
   async function deleteMemory(id: string, g: boolean) {
+    if (!sbAvailable) return
     if (g) { await supabase.from('openjarvis_global_memories').delete().eq('id', id); setGlobalMem(prev => prev.filter(m => m.id !== id)) }
     else { await supabase.from('openjarvis_memories').delete().eq('id', id); setLocalMem(prev => prev.filter(m => m.id !== id)) }
   }
+
+  if (!sbAvailable) return <div className="p-4 text-xs text-[#9CA3AF]">Not available in offline mode</div>
 
   return (
     <div className="p-4 space-y-3">
@@ -453,7 +534,7 @@ function MemoriesTab({ sessionId }: { sessionId: string | null }) {
 }
 
 /* ---- Templates Tab ---- */
-function TemplatesTab({ onApply }: { onApply: (t: OjTemplate) => void }) {
+function TemplatesTab({ onApply, sbAvailable }: { onApply: (t: OjTemplate) => void; sbAvailable: boolean }) {
   const [templates, setTemplates] = useState<OjTemplate[]>([])
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -461,22 +542,26 @@ function TemplatesTab({ onApply }: { onApply: (t: OjTemplate) => void }) {
   const [showForm, setShowForm] = useState(false)
 
   const load = useCallback(async () => {
+    if (!sbAvailable) return
     const { data } = await supabase.from('openjarvis_templates').select('*').order('created_at', { ascending: false })
     if (data) setTemplates(data)
-  }, [])
+  }, [sbAvailable])
 
   useEffect(() => { load() }, [load])
 
   async function saveTemplate() {
-    if (!name.trim() || !prompt.trim()) return
+    if (!name.trim() || !prompt.trim() || !sbAvailable) return
     const { data } = await supabase.from('openjarvis_templates').insert({ name: name.trim(), prompt: prompt.trim(), model: tmplModel }).select().single()
     if (data) { setTemplates(prev => [data, ...prev]); setName(''); setPrompt(''); setTmplModel(''); setShowForm(false) }
   }
 
   async function deleteTemplate(id: string) {
+    if (!sbAvailable) return
     await supabase.from('openjarvis_templates').delete().eq('id', id)
     setTemplates(prev => prev.filter(t => t.id !== id))
   }
+
+  if (!sbAvailable) return <div className="p-4 text-xs text-[#9CA3AF]">Not available in offline mode</div>
 
   return (
     <div className="p-4 space-y-3">
@@ -513,10 +598,11 @@ function TemplatesTab({ onApply }: { onApply: (t: OjTemplate) => void }) {
 }
 
 /* ---- Costs Tab ---- */
-function CostsTab() {
+function CostsTab({ sbAvailable }: { sbAvailable: boolean }) {
   const [total, setTotal] = useState<{ sessions: number; messages: number; tokensIn: number; tokensOut: number; costUsd: number; avgLatency: number } | null>(null)
 
   useEffect(() => {
+    if (!sbAvailable) { setTotal(null); return }
     const load = async () => {
       const { data: traces } = await supabase.from('openjarvis_traces').select('*')
       const { count: sessions } = await supabase.from('openjarvis_sessions').select('*', { count: 'exact', head: true })
@@ -529,8 +615,9 @@ function CostsTab() {
       setTotal({ sessions: sessions || 0, messages: messages || 0, tokensIn, tokensOut, costUsd: Math.round(costUsd * 100) / 100, avgLatency })
     }
     load()
-  }, [])
+  }, [sbAvailable])
 
+  if (!sbAvailable) return <div className="p-4 text-xs text-[#9CA3AF]">Not available in offline mode</div>
   if (!total) return <div className="p-4 text-xs text-[#9CA3AF]">Loading...</div>
 
   return (
