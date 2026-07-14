@@ -3,9 +3,10 @@ import sys
 from datetime import datetime, timezone
 
 from config import WATCHLIST, INDICATOR_PARAMS, DISCORD_WEBHOOK_URL
-from strategies.ema_crossover import run as ema_crossover
-from notify import send_signal, send_error
-from db import log_signal, get_recent_signals
+from regime import detect_regime, REGIME_PARAMS
+from ensemble import vote
+from notify import send_signal, send_error, send_report
+from db import log_signal, is_duplicate
 
 
 def fetch_stock(ticker: str) -> tuple:
@@ -21,22 +22,15 @@ def fetch_stock(ticker: str) -> tuple:
         return None, None
 
 
-def is_duplicate(signals: list[dict], stock: str, signal_type: str) -> bool:
-    recent = get_recent_signals(stock, limit=3)
-    for r in recent:
-        if r['signal_type'] == signal_type:
-            return True
-    return False
-
-
 def main():
     if not DISCORD_WEBHOOK_URL:
         print("ERROR: DISCORD_WEBHOOK_URL not set")
         sys.exit(1)
 
     now = datetime.now(timezone.utc)
-    print(f"[{now.isoformat()}] Starting analysis...")
+    print(f"[{now.isoformat()}] Starting multi-strategy analysis...")
 
+    signals_fired = 0
     for ticker in WATCHLIST:
         hist, name = fetch_stock(ticker)
         if hist is None:
@@ -44,14 +38,21 @@ def main():
             continue
 
         ticker_name = name or ticker
-        signals = ema_crossover(hist, INDICATOR_PARAMS)
+        regime = detect_regime(hist, REGIME_PARAMS)
+        confidence = 0
 
-        if not signals:
-            print(f"  {ticker_name}: no signals")
+        from regime import regime_confidence
+        confidence = regime_confidence(hist, regime)
+        print(f"  {ticker_name}: regime={regime} (confidence={confidence:.0%})")
+
+        ensemble_signals = vote(hist, {}, regime=regime)
+
+        if not ensemble_signals:
+            print(f"  {ticker_name}: no ensemble signal")
             continue
 
-        for sig in signals:
-            if is_duplicate(signals, ticker, sig['type']):
+        for sig in ensemble_signals:
+            if is_duplicate(ticker, sig['type']):
                 print(f"  {ticker_name}: {sig['type']} — duplicate, skipped")
                 continue
 
@@ -60,10 +61,12 @@ def main():
                 stock=ticker,
                 price=sig['price'],
                 target=sig['target'],
-                stop_loss=sig['stop_loss'],
+                stop_loss=sig['stop'],
                 reason=sig['reason'],
-                rsi=sig['rsi'],
-                volume_ratio=sig['volume_ratio'],
+                rsi=sig['avg_rsi'],
+                volume_ratio=sig['avg_volume_ratio'],
+                votes=sig['votes'],
+                strategies=sig['strategies'],
                 webhook_url=DISCORD_WEBHOOK_URL,
             )
             log_signal(
@@ -71,16 +74,21 @@ def main():
                 signal_type=sig['type'],
                 price=sig['price'],
                 target=sig['target'],
-                stop_loss=sig['stop_loss'],
-                rsi=sig['rsi'],
-                volume_ratio=sig['volume_ratio'],
+                stop_loss=sig['stop'],
+                rsi=sig['avg_rsi'],
+                volume_ratio=sig['avg_volume_ratio'],
                 reason=sig['reason'],
+                strategies=sig['strategies'],
+                votes=sig['votes'],
             )
-
+            signals_fired += 1
             status = "sent" if ok else "failed"
-            print(f"  {ticker_name}: {sig['type']} @ ₹{sig['price']} — {status}")
+            print(f"  {ticker_name}: {sig['type']} ({sig['votes']}/4 votes) @ ₹{sig['price']} — {status}")
 
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Done.")
+    if signals_fired == 0:
+        print("  No signals fired across all stocks.")
+
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Done. {signals_fired} signal(s).")
 
 
 if __name__ == '__main__':
